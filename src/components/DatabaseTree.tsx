@@ -16,14 +16,17 @@ import {
   ListOrdered,
   Loader2,
 } from 'lucide-react';
+import { useUIStore } from '../store/ui-store';
 import clsx from 'clsx';
 import { useExplorerStore, TreeNode, TreeNodeType } from '../store/explorer-store';
 import { useConnectionStore } from '../store/connection-store';
 import { useQueryStore } from '../store/query-store';
 import { useSchemaStore } from '../store/schema-store';
 import { ContextMenu } from './ContextMenu';
-import type { DatabaseEngine, Connection } from '../domain/types';
+import type { DatabaseEngine, Connection, CellValue } from '../domain/types';
+import { queryApi } from '../infrastructure/tauri-api';
 import { ensureDefaultSchemaInitialized } from '../utils/schema-init';
+import { AdminAdapterFactory } from '../infrastructure/admin-adapters';
 
 interface FlattenedNode {
   node: TreeNode;
@@ -31,6 +34,18 @@ interface FlattenedNode {
 }
 
 const NODE_HEIGHT = 28;
+
+const engineIcons: Record<string, string> = {
+  postgresql: '🐘',
+  mysql: '🐬',
+  sqlite: '📦',
+};
+
+// Helper para extraer valor de CellValue
+const getCellValue = (cell: CellValue | undefined): any => {
+  if (!cell || cell.type === 'Null') return null;
+  return (cell as any).value;
+};
 
 // Helper para generar identificadores SQL según el motor
 function quoteIdentifier(name: string, engine: DatabaseEngine): string {
@@ -59,7 +74,25 @@ function NodeIcon({ type, isExpanded, metadata }: { type: TreeNodeType; isExpand
   
   switch (type) {
     case 'connection':
-      return <Database className={clsx(iconClass, 'text-green-400')} />;
+      const status = metadata?.status as string;
+      const engine = (metadata?.engine as string) || 'postgresql';
+      const icon = engineIcons[engine] || '🐘';
+
+      return (
+        <div className="flex items-center gap-1.5 mr-1">
+          <div
+            className={clsx(
+              'w-2 h-2 rounded-full',
+              status === 'Connected'
+                ? 'bg-green-500'
+                : status === 'Connecting'
+                ? 'bg-yellow-500 animate-pulse'
+                : 'bg-gray-500'
+            )}
+          />
+          <span className="text-xs grayscale-[0.5]">{icon}</span>
+        </div>
+      );
     case 'database':
       return <Database className={clsx(iconClass, 'text-blue-400')} />;
     case 'schema':
@@ -204,26 +237,28 @@ export function DatabaseTree() {
     toggleNode,
     selectNode,
     refreshNode,
-    initializeConnection,
+    syncConnections,
   } = useExplorerStore();
 
-  const { connections, activeConnectionId, connectionStatuses } = useConnectionStore();
+  const { 
+    connections, 
+    activeConnectionId, 
+    connectionStatuses, 
+    connect, 
+    disconnect, 
+    deleteConnection, 
+    setActiveConnection,
+    updateConnection
+  } = useConnectionStore();
+  
   const { addTab, setActiveTab } = useQueryStore();
   const { setSelectedSchema, setSelectedDatabase, clear: clearSchema } = useSchemaStore();
-  const { setActiveConnection, updateConnection, connect } = useConnectionStore();
+  const { openConnectionModal } = useUIStore();
 
-  // Inicializar conexiones activas
+  // Sync connections to explorer tree
   useEffect(() => {
-    for (const conn of connections) {
-      const status = connectionStatuses[conn.id];
-      if (status === 'Connected') {
-        const connNodeId = `connection:${conn.id}`;
-        if (!nodes[connNodeId]) {
-          initializeConnection(conn.id, conn.name, conn.database || '');
-        }
-      }
-    }
-  }, [connections, connectionStatuses, nodes, initializeConnection]);
+    syncConnections(connections, connectionStatuses);
+  }, [connections, connectionStatuses, syncConnections]);
 
   // Flatten tree for virtualization
   const flattenedNodes = useMemo(() => {
@@ -257,6 +292,24 @@ export function DatabaseTree() {
     async (nodeId: string) => {
       const node = nodes[nodeId];
       if (!node) {
+        return;
+      }
+
+      if (node.type === 'connection') {
+        const connectionId = node.metadata?.connectionId as string;
+        const status = node.metadata?.status as string;
+
+        setActiveConnection(connectionId);
+
+        if (status !== 'Connected') {
+          try {
+            await connect(connectionId);
+          } catch (e) {
+            console.error(e);
+            return;
+          }
+        }
+        await toggleNode(nodeId, connectionId);
         return;
       }
       
@@ -353,9 +406,201 @@ export function DatabaseTree() {
       const connectionId = node.metadata?.connectionId as string;
       const schema = node.metadata?.schema as string;
       
+      if (node.type === 'connection') {
+        const status = node.metadata?.status as string;
+        if (status === 'Connected') {
+            items.push({
+                label: 'Disconnect',
+                action: () => disconnect(connectionId)
+            });
+            items.push({
+                label: 'Refresh',
+                action: () => refreshNode(node.id, connectionId)
+            });
+        } else {
+            items.push({
+                label: 'Connect',
+                action: () => connect(connectionId)
+            });
+        }
+        items.push({ separator: true, label: '', action: () => {} });
+        items.push({
+            label: 'Edit Connection',
+            action: () => openConnectionModal(connectionId)
+        });
+        items.push({
+            label: 'Delete Connection',
+            danger: true,
+            action: async () => {
+                if (confirm('Are you sure you want to delete this connection?')) {
+                    await deleteConnection(connectionId);
+                }
+            }
+        });
+        return items;
+      }
+
       // Obtener el engine de la conexión
       const connection = connections.find(c => c.id === connectionId);
       const engine = connection?.engine || 'postgresql';
+
+      if (node.type === 'users-folder') {
+        items.push(
+          {
+            label: 'Create User',
+            action: () => {
+              const tabId = addTab({
+                type: 'admin',
+                title: 'New User',
+                connectionId,
+                adminState: {
+                  type: 'user',
+                  mode: 'create',
+                  engine,
+                  initialDefinition: { name: '', roles: [] },
+                },
+              });
+              setActiveTab(tabId);
+            },
+          },
+          { label: '', action: () => {}, separator: true },
+          {
+            label: 'Refresh',
+            action: () => {
+              if (connectionId) {
+                refreshNode(node.id, connectionId);
+              }
+            },
+          }
+        );
+        return items;
+      }
+
+      if (node.type === 'user') {
+        items.push(
+          {
+            label: 'Edit User',
+            action: async () => {
+              try {
+                const adapter = AdminAdapterFactory.getAdapter(engine);
+                const executor = async (sql: string) => {
+                  const res = await queryApi.execute(connectionId, sql);
+                  if (!res.rows) return [];
+                  return res.rows.map(row => {
+                    const obj: Record<string, any> = {};
+                    res.columns.forEach((col, i) => {
+                      obj[col.name] = getCellValue(row[i]);
+                    });
+                    return obj;
+                  });
+                };
+                const definition = await adapter.getUserDefinition(node.name, executor);
+                
+                const tabId = addTab({
+                  type: 'admin',
+                  title: `Edit ${node.name}`,
+                  connectionId,
+                  adminState: {
+                    type: 'user',
+                    mode: 'edit',
+                    engine,
+                    initialDefinition: definition,
+                  },
+                });
+                setActiveTab(tabId);
+              } catch (error) {
+                console.error('Failed to load user definition:', error);
+              }
+            },
+          },
+          { label: '', action: () => {}, separator: true },
+          {
+            label: 'Drop User',
+            action: () => {
+              // TODO: Confirmation and SQL Preview via Admin Modal?
+              // For now simple SQL execution or tab
+              const adapter = AdminAdapterFactory.getAdapter(engine);
+              const sql = adapter.getDropUserSQL(node.name);
+              const tabId = addTab({ title: `DROP ${node.name}`, query: sql, connectionId });
+              setActiveTab(tabId);
+            },
+            danger: true,
+          }
+        );
+        return items;
+      }
+
+      if (node.type === 'roles-folder') {
+        items.push(
+          {
+            label: 'Create Role',
+            action: () => {
+              const adapter = AdminAdapterFactory.getAdapter(engine);
+              const sql = adapter.getCreateRoleSQL({ name: 'new_role' });
+              const tabId = addTab({ title: 'New Role', query: sql, connectionId });
+              setActiveTab(tabId);
+            },
+          },
+          { label: '', action: () => {}, separator: true },
+          {
+            label: 'Refresh',
+            action: () => {
+              if (connectionId) {
+                refreshNode(node.id, connectionId);
+              }
+            },
+          }
+        );
+        return items;
+      }
+
+      if (node.type === 'role') {
+        items.push(
+          {
+            label: 'Drop Role',
+            action: () => {
+              const adapter = AdminAdapterFactory.getAdapter(engine);
+              const sql = adapter.getDropRoleSQL(node.name);
+              const tabId = addTab({ title: `DROP ${node.name}`, query: sql, connectionId });
+              setActiveTab(tabId);
+            },
+            danger: true,
+          }
+        );
+        return items;
+      }
+
+      if (node.type === 'tables-folder') {
+        items.push(
+          {
+            label: 'Create Table',
+            action: () => {
+              const tabId = addTab({
+                type: 'admin',
+                title: 'New Table',
+                connectionId,
+                adminState: {
+                  type: 'table',
+                  mode: 'create',
+                  engine,
+                  schema: node.metadata?.schema as string,
+                },
+              });
+              setActiveTab(tabId);
+            },
+          },
+          { label: '', action: () => {}, separator: true },
+          {
+            label: 'Refresh',
+            action: () => {
+              if (connectionId) {
+                refreshNode(node.id, connectionId);
+              }
+            },
+          }
+        );
+        return items;
+      }
 
       if (node.type === 'table') {
         const fullTableName = formatTableName(schema, node.name, engine);
@@ -366,9 +611,41 @@ export function DatabaseTree() {
             action: () => handleDoubleClick(node),
           },
           {
-            label: 'View Structure',
-            action: () => {
-              // TODO: Abrir panel de estructura
+            label: 'Edit Structure',
+            action: async () => {
+              try {
+                const adapter = AdminAdapterFactory.getAdapter(engine);
+                const executor = async (sql: string) => {
+                  const res = await queryApi.execute(connectionId, sql);
+                  if (!res.rows) return [];
+                  return res.rows.map(row => {
+                    const obj: Record<string, any> = {};
+                    res.columns.forEach((col, i) => {
+                      obj[col.name] = getCellValue(row[i]);
+                    });
+                    return obj;
+                  });
+                };
+                const definition = await adapter.getTableDefinition(schema, node.name, executor);
+                
+                const tabId = addTab({
+                  type: 'admin',
+                  title: `Edit ${node.name}`,
+                  connectionId,
+                  adminState: {
+                    type: 'table',
+                    mode: 'edit',
+                    engine,
+                    initialDefinition: definition,
+                    schema,
+                    table: node.name,
+                  },
+                });
+                setActiveTab(tabId);
+              } catch (error) {
+                console.error('Failed to load table definition:', error);
+                // Could use a toast notification here
+              }
             },
           },
           { label: '', action: () => {}, separator: true },

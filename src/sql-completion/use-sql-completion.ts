@@ -150,7 +150,9 @@ export function useSqlCompletion(monaco: typeof Monaco | null) {
       }
     }
     
-    schemaCatalog.update(engine, selectedDatabase ?? undefined, allSchemas, allTables);
+    if (activeConnectionId) {
+      schemaCatalog.update(activeConnectionId, engine, selectedDatabase ?? undefined, allSchemas, allTables);
+    }
   }, [engine, selectedDatabase, schemas, tables, nodes, activeConnectionId]);
 
   // Actualizar tabla específica cuando se selecciona

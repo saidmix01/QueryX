@@ -9,15 +9,19 @@ import { useConnectionStore } from '../store/connection-store';
 import { Database, Code2, Pin } from 'lucide-react';
 import { useRef } from 'react';
 import { useResultPanelsStore } from '../store/result-panels-store';
+import { TableDefinition } from '../domain/admin-types';
+
+import { TableAdminView } from './admin/TableAdminView';
+import { UserAdminView } from './admin/UserAdminView';
+
 
 export function MainContent() {
-  const { tabs, activeTabId } = useQueryStore();
+  const { tabs, activeTabId, closeTab } = useQueryStore();
   const { activeConnectionId } = useConnectionStore();
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const editorPanelRef = useRef<ImperativePanelHandle>(null);
   const resultsPanelRef = useRef<ImperativePanelHandle>(null);
-  const setPanelState = useResultPanelsStore((s) => s.setPanelState);
   const activePanel = useResultPanelsStore((s) => s.panels.find((p) => p.id === activeTab?.id));
 
   // Estado vacío - sin conexión o sin tabs
@@ -79,38 +83,61 @@ export function MainContent() {
       {/* Tabs - Minimalistas */}
       <QueryTabs />
 
-      {/* Editor y Results - Layout vertical con resize */}
+      {/* Content Area */}
       {activeTab && (
-        <PanelGroup direction="vertical" className="flex-1">
-          {/* SQL Editor Panel - 60-70% del espacio */}
-          <Panel defaultSize={65} minSize={30} maxSize={85} ref={editorPanelRef}>
-            <QueryEditor tab={activeTab} />
-          </Panel>
-
-          {/* Resize Handle - Sutil pero funcional */}
-          <PanelResizeHandle className="h-px bg-dark-border/30 hover:bg-matrix-700/50 transition-all relative group">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <motion.div 
-                className="w-12 h-0.5 bg-dark-border/50 rounded-full group-hover:bg-matrix-700/70 group-hover:w-16 transition-all"
-                whileHover={{ scaleY: 2 }}
-              />
-            </div>
-          </PanelResizeHandle>
-
-          {/* Results Panel - Redimensionable */}
-          <Panel minSize={15} maxSize={70} ref={resultsPanelRef}>
-            {activeTab.multiResults ? (
-              <MultiStatementResults
-                results={activeTab.multiResults}
-                totalExecutionTimeMs={activeTab.multiResults.reduce((sum: number, r: any) => sum + r.execution_time_ms, 0)}
+        activeTab.type === 'admin' ? (
+          <div className="flex-1 overflow-hidden">
+            {activeTab.adminState?.type === 'table' && (
+              <TableAdminView
+                initialDefinition={activeTab.adminState.initialDefinition as TableDefinition}
+                engine={activeTab.adminState.engine}
                 connectionId={activeTab.connectionId}
-                tabId={activeTab.id}
+                mode={activeTab.adminState.mode}
+                onClose={() => closeTab(activeTab.id)}
               />
-            ) : (
-              <ResultsTable tab={activeTab} />
             )}
-          </Panel>
-        </PanelGroup>
+            {activeTab.adminState?.type === 'user' && (
+              <UserAdminView
+                initialDefinition={activeTab.adminState.initialDefinition as any} // Cast needed if types mismatch lightly
+                engine={activeTab.adminState.engine}
+                connectionId={activeTab.connectionId}
+                mode={activeTab.adminState.mode}
+                onClose={() => closeTab(activeTab.id)}
+              />
+            )}
+          </div>
+        ) : (
+          <PanelGroup direction="vertical" className="flex-1">
+            {/* SQL Editor Panel - 60-70% del espacio */}
+            <Panel defaultSize={65} minSize={30} maxSize={85} ref={editorPanelRef}>
+              <QueryEditor tab={activeTab} />
+            </Panel>
+
+            {/* Resize Handle - Sutil pero funcional */}
+            <PanelResizeHandle className="h-px bg-dark-border/30 hover:bg-matrix-700/50 transition-all relative group">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <motion.div 
+                  className="w-12 h-0.5 bg-dark-border/50 rounded-full group-hover:bg-matrix-700/70 group-hover:w-16 transition-all"
+                  whileHover={{ scaleY: 2 }}
+                />
+              </div>
+            </PanelResizeHandle>
+
+            {/* Results Panel - Redimensionable */}
+            <Panel minSize={15} maxSize={70} ref={resultsPanelRef}>
+              {activeTab.multiResults ? (
+                <MultiStatementResults
+                  results={activeTab.multiResults}
+                  totalExecutionTimeMs={activeTab.multiResults.reduce((sum: number, r: any) => sum + r.execution_time_ms, 0)}
+                  connectionId={activeTab.connectionId}
+                  tabId={activeTab.id}
+                />
+              ) : (
+                <ResultsTable tab={activeTab} />
+              )}
+            </Panel>
+          </PanelGroup>
+        )
       )}
       {activePanel?.state === 'pinned' && (
         <div className="fixed bottom-0 left-0 right-0 bg-dark-surface/70 backdrop-blur-md border-t border-dark-border/30 px-4 py-1.5 flex items-center justify-end">

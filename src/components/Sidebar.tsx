@@ -1,19 +1,17 @@
 import { motion } from 'framer-motion';
-import { Database, History, Layers, Plus, BookMarked } from 'lucide-react';
+import { Database, History, Plus, BookMarked } from 'lucide-react';
 import { useUIStore } from '../store/ui-store';
-import { ConnectionList } from './ConnectionList';
 import { DatabaseTree } from './DatabaseTree';
 import { QueryHistory } from './QueryHistory';
 import { SavedQueriesPanel } from './SavedQueriesPanel';
 import clsx from 'clsx';
 
-type SidebarView = 'connections' | 'explorer' | 'history' | 'saved-queries';
+type SidebarView = 'explorer' | 'history' | 'saved-queries';
 
 const navItems: { id: SidebarView; icon: typeof Database; label: string }[] = [
-  { id: 'explorer', icon: Layers, label: 'Explorer' },
+  { id: 'explorer', icon: Database, label: 'Explorer' },
   { id: 'saved-queries', icon: BookMarked, label: 'Queries' },
   { id: 'history', icon: History, label: 'History' },
-  { id: 'connections', icon: Database, label: 'Connections' },
 ];
 
 export function Sidebar() {
@@ -88,7 +86,6 @@ export function Sidebar() {
             transition={{ duration: 0.12 }}
             className="h-full"
           >
-            {sidebarView === 'connections' && <ConnectionList />}
             {sidebarView === 'explorer' && <DatabaseTree />}
             {sidebarView === 'saved-queries' && <SavedQueriesPanel />}
             {sidebarView === 'history' && <QueryHistory />}

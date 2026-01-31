@@ -1,11 +1,12 @@
-import { useEffect, useCallback, useMemo } from 'react';
-import { Search, Table, Eye, X } from 'lucide-react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
+import { Search, Table, Eye, X, BookMarked } from 'lucide-react';
 import { useCommandPaletteStore } from '../store/command-palette-store';
 import { useQueryStore } from '../store/query-store';
 import { schemaCatalog } from '../sql-completion/schema-catalog';
 import type { CommandPaletteItem } from '../store/command-palette-store';
 import { useConnectionStore } from '../store/connection-store';
 import { ensureDefaultSchemaInitialized } from '../utils/schema-init';
+import { useSavedQueryStore } from '../store/saved-query-store';
 
 export function CommandPalette() {
   const {
@@ -22,8 +23,16 @@ export function CommandPalette() {
 
   const { activeTabId, updateQuery } = useQueryStore();
   const { connections, activeConnectionId } = useConnectionStore();
+  const { queries: savedQueries, loadQueries } = useSavedQueryStore();
   const activeConnection = connections.find((c) => c.id === activeConnectionId);
   const engine = activeConnection?.engine || 'postgresql';
+  const [catalogVersion, setCatalogVersion] = useState(0);
+
+  useEffect(() => {
+    return schemaCatalog.subscribe(() => {
+      setCatalogVersion(v => v + 1);
+    });
+  }, []);
 
   const quoteIdentifier = useCallback((name: string, eng: typeof engine): string => {
     if (!name) return '';
@@ -54,9 +63,17 @@ export function CommandPalette() {
   const searchResults = useMemo(() => {
     const allTables = schemaCatalog.getTables();
     
+    const savedQueryItems = savedQueries.map((q) => ({
+      id: `saved-${q.id}`,
+      type: 'saved-query',
+      name: q.name,
+      fullName: q.name,
+      savedQuery: q,
+    } as CommandPaletteItem));
+
     if (!query) {
-      // Sin query, mostrar todas las tablas
-      return allTables.map((table) => {
+      // Sin query, mostrar todas las tablas y consultas guardadas
+      const tableItems = allTables.map((table) => {
         const fullName = table.schema
           ? `${table.schema}.${table.name}`
           : table.name;
@@ -71,12 +88,14 @@ export function CommandPalette() {
           table,
         } as CommandPaletteItem;
       });
+
+      return [...savedQueryItems, ...tableItems];
     }
 
     // Búsqueda fuzzy
     const lowerQuery = query.toLowerCase();
     
-    return allTables
+    const matchedTables = allTables
       .map((table) => {
         const fullName = table.schema
           ? `${table.schema}.${table.name}`
@@ -104,28 +123,53 @@ export function CommandPalette() {
           score,
         };
       })
-      .filter((item) => item.score > 0)
+      .filter((item) => item.score > 0);
+
+    const matchedQueries = savedQueryItems
+      .map((item) => {
+        const nameMatch = item.name.toLowerCase().includes(lowerQuery);
+        let score = 0;
+        if (item.name.toLowerCase().startsWith(lowerQuery)) score += 12; // Prioridad alta a consultas guardadas
+        if (nameMatch) score += 6;
+        
+        return {
+          ...item,
+          score,
+        };
+      })
+      .filter((item) => item.score > 0);
+
+    return [...matchedQueries, ...matchedTables]
       .sort((a, b) => b.score - a.score)
       .slice(0, 50) // Limitar a 50 resultados
       .map(({ score, ...item }) => item as CommandPaletteItem);
-  }, [query, isOpen]);
+  }, [query, isOpen, savedQueries, catalogVersion]);
 
   useEffect(() => {
     setItems(searchResults);
   }, [searchResults, setItems]);
   
   useEffect(() => {
-    if (!isOpen || !activeConnectionId || !activeConnection || !schemaCatalog.isEmpty()) return;
-    ensureDefaultSchemaInitialized(activeConnection);
-  }, [isOpen, activeConnectionId, engine, activeConnection]);
+    if (!isOpen || !activeConnectionId || !activeConnection) return;
+    
+    if (schemaCatalog.getConnectionId() !== activeConnectionId) {
+      ensureDefaultSchemaInitialized(activeConnection);
+    }
+    
+    loadQueries(activeConnectionId);
+  }, [isOpen, activeConnectionId, engine, activeConnection, loadQueries]);
 
   const handleSelect = useCallback(
     (item: CommandPaletteItem) => {
       if (!activeTabId) return;
 
-      // Insertar SELECT * FROM en el editor
-      const sql = `SELECT * FROM ${formatFullName(item.schema, item.name)} LIMIT 100`;
-      updateQuery(activeTabId, sql);
+      if (item.type === 'saved-query' && item.savedQuery) {
+        updateQuery(activeTabId, item.savedQuery.sql);
+      } else {
+        // Insertar SELECT * FROM en el editor
+        const sql = `SELECT * FROM ${formatFullName(item.schema, item.name)} LIMIT 100`;
+        updateQuery(activeTabId, sql);
+      }
       
       close();
     },
@@ -221,11 +265,15 @@ export function CommandPalette() {
                     className={`w-8 h-8 rounded flex items-center justify-center ${
                       item.type === 'table'
                         ? 'bg-blue-500/20 text-blue-400'
+                        : item.type === 'saved-query'
+                        ? 'bg-green-500/20 text-green-400'
                         : 'bg-purple-500/20 text-purple-400'
                     }`}
                   >
                     {item.type === 'table' ? (
                       <Table className="w-4 h-4" />
+                    ) : item.type === 'saved-query' ? (
+                      <BookMarked className="w-4 h-4" />
                     ) : (
                       <Eye className="w-4 h-4" />
                     )}
@@ -238,7 +286,7 @@ export function CommandPalette() {
                       <span className="text-white">{item.name}</span>
                     </div>
                     <div className="text-xs text-dark-muted">
-                      {item.type === 'table' ? 'Tabla' : 'Vista'} •{' '}
+                      {item.type === 'table' ? 'Tabla' : item.type === 'saved-query' ? 'Consulta Guardada' : 'Vista'} •{' '}
                       {item.table?.columns.length || 0} columnas
                     </div>
                   </div>

@@ -3,8 +3,22 @@ import type { QueryHistoryEntry, QueryResult } from '../domain/types';
 import { queryApi } from '../infrastructure/tauri-api';
 import { useResultPanelsStore } from './result-panels-store';
 
-interface QueryTab {
+import { DatabaseEngine } from '../domain/types';
+import { TableDefinition, UserDefinition, RoleDefinition } from '../domain/admin-types';
+
+export interface AdminTabState {
+  type: 'table' | 'user' | 'role';
+  mode: 'create' | 'edit';
+  engine: DatabaseEngine;
+  initialDefinition?: TableDefinition | UserDefinition | RoleDefinition; // For table/user/role edit
+  schema?: string;
+  table?: string;
+}
+
+export interface QueryTab {
   id: string;
+  type?: 'query' | 'admin';
+  adminState?: AdminTabState;
   title: string;
   connectionId: string;
   query: string;
@@ -18,6 +32,8 @@ interface AddTabOptions {
   title?: string;
   query?: string;
   connectionId?: string;
+  type?: 'query' | 'admin';
+  adminState?: AdminTabState;
 }
 
 interface QueryState {
@@ -49,6 +65,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     const id = `tab-${++tabCounter}`;
     const newTab: QueryTab = {
       id,
+      type: 'query',
       title: `Query ${tabCounter}`,
       connectionId,
       query: '',
@@ -68,6 +85,8 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     const id = `tab-${++tabCounter}`;
     const newTab: QueryTab = {
       id,
+      type: options.type || 'query',
+      adminState: options.adminState,
       title: options.title || `Query ${tabCounter}`,
       connectionId: options.connectionId || '',
       query: options.query || '',

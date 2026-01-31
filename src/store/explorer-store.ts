@@ -1,5 +1,13 @@
 import { create } from 'zustand';
-import { schemaApi } from '../infrastructure/tauri-api';
+import { schemaApi, queryApi } from '../infrastructure/tauri-api';
+import { AdminAdapterFactory } from '../infrastructure/admin-adapters';
+import { DatabaseEngine, CellValue, ConnectionStatus } from '../domain/types';
+
+// Helper to extract value from CellValue
+const getCellValue = (cell: CellValue | undefined): any => {
+  if (!cell || cell.type === 'Null') return null;
+  return (cell as any).value;
+};
 
 // Tipos de nodos del árbol
 export type TreeNodeType =
@@ -21,7 +29,11 @@ export type TreeNodeType =
   | 'functions-folder'
   | 'function'
   | 'sequences-folder'
-  | 'sequence';
+  | 'sequence'
+  | 'users-folder'
+  | 'user'
+  | 'roles-folder'
+  | 'role';
 
 export interface TreeNode {
   id: string;
@@ -48,6 +60,7 @@ interface ExplorerState {
 
   // Actions
   initializeConnection: (connectionId: string, connectionName: string, database?: string) => void;
+  syncConnections: (connections: { id: string; name: string; database?: string; engine?: string }[], statuses: Record<string, ConnectionStatus>) => void;
   toggleNode: (nodeId: string, connectionId: string) => Promise<void>;
   selectNode: (nodeId: string) => void;
   loadChildren: (nodeId: string, connectionId: string) => Promise<void>;
@@ -137,6 +150,120 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
     });
   },
 
+  syncConnections: (connections, statuses) => {
+    set((state) => {
+      const newNodes = { ...state.nodes };
+      const newRootNodes = connections.map(c => createNodeId('connection', c.id));
+      let stateChanged = false;
+
+      // Check if rootNodes changed
+      if (JSON.stringify(newRootNodes) !== JSON.stringify(state.rootNodes)) {
+        stateChanged = true;
+      }
+
+      connections.forEach(conn => {
+        const nodeId = createNodeId('connection', conn.id);
+        const rawStatus = statuses[conn.id] || 'Disconnected';
+        // Normalize status for metadata (string) to avoid object issues in UI
+        const status = typeof rawStatus === 'string' ? rawStatus : 'Error'; 
+        
+        const isConnected = status === 'Connected';
+        const existingNode = newNodes[nodeId];
+
+        // Prepare metadata
+        const metadata = { 
+          connectionId: conn.id, 
+          database: conn.database, 
+          status, 
+          engine: conn.engine 
+        };
+
+        if (existingNode) {
+          // Check for changes to avoid unnecessary updates
+          const currentStatus = existingNode.metadata?.status;
+          const currentName = existingNode.name;
+          
+          if (currentStatus !== status || currentName !== conn.name) {
+             stateChanged = true;
+             newNodes[nodeId] = {
+               ...existingNode,
+               name: conn.name,
+               metadata: { ...existingNode.metadata, ...metadata },
+             };
+          }
+
+          // Handle Disconnected -> Connected transition structure
+          if (isConnected && existingNode.children.length === 0 && conn.database) {
+              // If it's connected but missing children (and has a default DB), initialize structure
+              const dbNodeId = createNodeId('database', conn.id, conn.database);
+              newNodes[nodeId].children = [dbNodeId];
+              newNodes[nodeId].isLoaded = true;
+              
+              if (!newNodes[dbNodeId]) {
+                newNodes[dbNodeId] = {
+                  id: dbNodeId,
+                  type: 'database',
+                  name: conn.database,
+                  parentId: nodeId,
+                  isExpandable: true,
+                  isExpanded: false,
+                  isLoading: false,
+                  isLoaded: false,
+                  children: [],
+                  metadata: { connectionId: conn.id, database: conn.database, engine: conn.engine },
+                };
+              }
+              stateChanged = true;
+          } else if (!isConnected && existingNode.children.length > 0) {
+              // Connected -> Disconnected: Clear children and collapse
+              newNodes[nodeId].children = [];
+              newNodes[nodeId].isExpanded = false;
+              newNodes[nodeId].isLoaded = false;
+              stateChanged = true;
+          }
+        } else {
+          stateChanged = true;
+          // Create new node
+          const shouldBeLoaded = isConnected && !!conn.database;
+          
+          newNodes[nodeId] = {
+            id: nodeId,
+            type: 'connection',
+            name: conn.name,
+            parentId: null,
+            isExpandable: true,
+            isExpanded: false,
+            isLoading: false,
+            isLoaded: shouldBeLoaded,
+            children: [],
+            metadata,
+          };
+
+          if (isConnected && conn.database) {
+             const dbNodeId = createNodeId('database', conn.id, conn.database);
+             newNodes[nodeId].children = [dbNodeId];
+             newNodes[dbNodeId] = {
+                id: dbNodeId,
+                type: 'database',
+                name: conn.database,
+                parentId: nodeId,
+                isExpandable: true,
+                isExpanded: false,
+                isLoading: false,
+                isLoaded: false,
+                children: [],
+                metadata: { connectionId: conn.id, database: conn.database, engine: conn.engine },
+             };
+          }
+        }
+      });
+
+      if (!stateChanged) return state;
+
+      return { nodes: newNodes, rootNodes: newRootNodes };
+    });
+  },
+
   toggleNode: async (nodeId, connectionId) => {
     const { nodes, loadChildren } = get();
     const node = nodes[nodeId];
@@ -184,6 +311,42 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
           expandedNodes,
         };
       });
+
+      // Auto-expansion logic
+      const { nodes: currentNodes, toggleNode } = get();
+      const updatedNode = currentNodes[nodeId];
+      if (!updatedNode) return;
+
+      const expandChild = async (childId: string) => {
+        const child = get().nodes[childId];
+        if (child && !child.isExpanded) {
+          await toggleNode(childId, connectionId);
+        }
+      };
+
+      if (updatedNode.type === 'connection' && updatedNode.children.length === 1) {
+        // Connection -> Single Database
+        await expandChild(updatedNode.children[0]);
+      } else if (updatedNode.type === 'database') {
+        // Database -> 'public' Schema or Single Schema
+        const children = updatedNode.children.map(id => get().nodes[id]).filter(Boolean);
+        const publicSchema = children.find(c => c.type === 'schema' && c.name === 'public');
+        const singleSchema = children.length === 1 && children[0].type === 'schema' ? children[0] : null;
+        
+        const targetSchema = publicSchema || singleSchema;
+        if (targetSchema) {
+            await expandChild(targetSchema.id);
+        }
+      } else if (updatedNode.type === 'schema') {
+        // Schema -> Tables Folder
+        const tablesFolderId = updatedNode.children.find(id => {
+            const child = get().nodes[id];
+            return child && child.type === 'tables-folder';
+        });
+        if (tablesFolderId) {
+            await expandChild(tablesFolderId);
+        }
+      }
     }
   },
 
@@ -243,7 +406,10 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
 
         case 'database': {
           const database = node.metadata?.database as string;
-          console.log('[Explorer] Loading schemas for database:', { connectionId, database });
+          const engine = node.metadata?.engine as DatabaseEngine;
+          console.log('[Explorer] Loading children for database:', { connectionId, database, engine });
+          
+          // 1. Load Schemas
           const schemas = await schemaApi.listSchemas(connectionId, database);
           console.log('[Explorer] Schemas loaded:', schemas);
           
@@ -264,6 +430,129 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
               children: [],
               metadata: { connectionId, database, schema: schema.name, isSystem: schema.is_system },
             };
+          }
+
+          // 2. Load Users and Roles folders if supported
+          if (engine) {
+            try {
+              const adapter = AdminAdapterFactory.getAdapter(engine);
+              
+              if (adapter.features.users) {
+                const usersId = createNodeId('users-folder', connectionId, database);
+                childIds.push(usersId);
+                newNodes[usersId] = {
+                  id: usersId,
+                  type: 'users-folder',
+                  name: 'Users',
+                  parentId: nodeId,
+                  isExpandable: true,
+                  isExpanded: false,
+                  isLoading: false,
+                  isLoaded: false,
+                  children: [],
+                  metadata: { connectionId, database, engine },
+                };
+              }
+
+              if (adapter.features.roles) {
+                const rolesId = createNodeId('roles-folder', connectionId, database);
+                childIds.push(rolesId);
+                newNodes[rolesId] = {
+                  id: rolesId,
+                  type: 'roles-folder',
+                  name: 'Roles',
+                  parentId: nodeId,
+                  isExpandable: true,
+                  isExpanded: false,
+                  isLoading: false,
+                  isLoaded: false,
+                  children: [],
+                  metadata: { connectionId, database, engine },
+                };
+              }
+            } catch (e) {
+              console.warn('[Explorer] Failed to get admin adapter:', e);
+            }
+          }
+          break;
+        }
+
+        case 'users-folder': {
+          const { database, engine } = node.metadata as { database: string; engine: DatabaseEngine };
+          const adapter = AdminAdapterFactory.getAdapter(engine);
+          const query = adapter.getUsersQuery();
+          
+          if (query) {
+             const result = await queryApi.execute(connectionId, query);
+             if (result.rows) {
+               const users = result.rows.map(row => {
+                 const obj: Record<string, any> = {};
+                 result.columns.forEach((col, i) => {
+                   obj[col.name] = getCellValue(row[i]);
+                 });
+                 return obj;
+               });
+
+               for (const row of users) {
+                 const name = row.name as string;
+                 if (!name) continue;
+
+                 const userId = createNodeId('user', connectionId, database, name);
+                 childIds.push(userId);
+                 newNodes[userId] = {
+                   id: userId,
+                   type: 'user',
+                   name: name,
+                   parentId: nodeId,
+                   isExpandable: false, // For now
+                   isExpanded: false,
+                   isLoading: false,
+                   isLoaded: true,
+                   children: [],
+                   metadata: { connectionId, database, user: name, ...row },
+                 };
+               }
+             }
+          }
+          break;
+        }
+
+        case 'roles-folder': {
+          const { database, engine } = node.metadata as { database: string; engine: DatabaseEngine };
+          const adapter = AdminAdapterFactory.getAdapter(engine);
+          const query = adapter.getRolesQuery();
+          
+          if (query) {
+             const result = await queryApi.execute(connectionId, query);
+             if (result.rows) {
+               const roles = result.rows.map(row => {
+                 const obj: Record<string, any> = {};
+                 result.columns.forEach((col, i) => {
+                   obj[col.name] = getCellValue(row[i]);
+                 });
+                 return obj;
+               });
+
+               for (const row of roles) {
+                 const name = row.name as string;
+                 if (!name) continue;
+
+                 const roleId = createNodeId('role', connectionId, database, name);
+                 childIds.push(roleId);
+                 newNodes[roleId] = {
+                   id: roleId,
+                   type: 'role',
+                   name: name,
+                   parentId: nodeId,
+                   isExpandable: false,
+                   isExpanded: false,
+                   isLoading: false,
+                   isLoaded: true,
+                   children: [],
+                   metadata: { connectionId, database, role: name, ...row },
+                 };
+               }
+             }
           }
           break;
         }

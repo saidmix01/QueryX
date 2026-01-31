@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 type Theme = 'dark' | 'light';
-type SidebarView = 'connections' | 'explorer' | 'history' | 'saved-queries';
+type SidebarView = 'explorer' | 'history' | 'saved-queries';
 
 interface UIState {
   theme: Theme;
@@ -40,7 +40,7 @@ export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
       theme: 'dark',
-      sidebarView: 'connections',
+      sidebarView: 'explorer',
       sidebarWidth: 280,
       isConnectionModalOpen: false,
       editingConnectionId: null,

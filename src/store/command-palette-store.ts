@@ -1,16 +1,18 @@
 import { create } from 'zustand';
 import type { CatalogTable } from '../sql-completion/schema-catalog';
+import type { SavedQuery } from '../domain/saved-query-types';
 
 export type CommandPaletteAction = 'insert' | 'open-data';
 
 export interface CommandPaletteItem {
   id: string;
-  type: 'table' | 'view' | 'schema';
+  type: 'table' | 'view' | 'schema' | 'saved-query';
   name: string;
   schema?: string;
   database?: string;
   fullName: string;
   table?: CatalogTable;
+  savedQuery?: SavedQuery;
 }
 
 interface CommandPaletteState {

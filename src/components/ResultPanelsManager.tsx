@@ -5,7 +5,7 @@ import { ResultsTable } from './ResultsTable';
 import { createPortal } from 'react-dom';
 
 export function ResultPanelsManager() {
-  const { panels, setPanelState, closePanel } = useResultPanelsStore();
+  const { panels, setPanelState } = useResultPanelsStore();
 
   const renderTabFromPanel = (panel: any) => {
     if (!panel.result) return null;

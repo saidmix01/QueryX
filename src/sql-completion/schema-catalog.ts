@@ -36,6 +36,20 @@ export class SchemaCatalog {
   private tablesByFullName: Map<string, CatalogTable> = new Map();
   private engine: DatabaseEngine = 'postgresql';
   private currentDatabase?: string;
+  private connectionId?: string;
+  private listeners: Set<() => void> = new Set();
+
+  /**
+   * Suscribe a cambios en el catálogo
+   */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify(): void {
+    this.listeners.forEach(listener => listener());
+  }
 
   /**
    * Actualiza una tabla específica en el catálogo
@@ -73,18 +87,22 @@ export class SchemaCatalog {
         }
       }
     }
+
+    this.notify();
   }
 
   /**
    * Actualiza el catálogo con nueva metadata del schema store
    */
   update(
+    connectionId: string,
     engine: DatabaseEngine,
     database: string | undefined,
     schemas: SchemaInfo[],
     tables: TableInfo[]
   ): void {
-    this.clear();
+    this.clear(false); // No notificar en clear interno para evitar doble notificación
+    this.connectionId = connectionId;
     this.engine = engine;
     this.currentDatabase = database;
 
@@ -119,6 +137,8 @@ export class SchemaCatalog {
         this.indexTable(catalogTable);
       }
     }
+
+    this.notify();
   }
 
   private convertTable(table: TableInfo, schema?: string): CatalogTable {
@@ -252,13 +272,21 @@ export class SchemaCatalog {
     return this.engine;
   }
 
+  getConnectionId(): string | undefined {
+    return this.connectionId;
+  }
+
   /**
    * Limpia el catálogo
    */
-  clear(): void {
+  clear(notify = true): void {
     this.schemas.clear();
     this.tablesByName.clear();
     this.tablesByFullName.clear();
+    this.connectionId = undefined;
+    if (notify) {
+      this.notify();
+    }
   }
 
   /**

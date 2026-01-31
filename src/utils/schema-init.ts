@@ -40,7 +40,9 @@ export async function ensureDefaultSchemaInitialized(
     setSelectedSchema(id, schemaName);
     await loadTables(id, schemaName);
     const tables = getTables(id) || [];
-    schemaCatalog.update(engine, db || undefined, schemas, tables);
+    // Recargar schemas para asegurar que incluyen las tablas recién cargadas
+    const updatedSchemas = getSchemas(id) || [];
+    schemaCatalog.update(id, engine, db || undefined, updatedSchemas, tables);
     return;
   }
  
@@ -57,12 +59,12 @@ export async function ensureDefaultSchemaInitialized(
       await loadTables(id, db);
       const schemas = getSchemas(id) || [];
       const tables = getTables(id) || [];
-      schemaCatalog.update(engine, db || undefined, schemas, tables);
+      schemaCatalog.update(id, engine, db || undefined, schemas, tables);
     } else {
       await loadTables(id);
       const schemas = getSchemas(id) || [];
       const tables = getTables(id) || [];
-      schemaCatalog.update(engine, undefined, schemas, tables);
+      schemaCatalog.update(id, engine, undefined, schemas, tables);
     }
     return;
   }
@@ -74,12 +76,12 @@ export async function ensureDefaultSchemaInitialized(
     }
     const schemas = getSchemas(id) || [];
     const tables = getTables(id) || [];
-    schemaCatalog.update(engine, undefined, schemas, tables);
+    schemaCatalog.update(id, engine, undefined, schemas, tables);
     return;
   }
  
   await loadTables(id);
   const schemas = getSchemas(id) || [];
   const tables = getTables(id) || [];
-  schemaCatalog.update(engine, undefined, schemas, tables);
+  schemaCatalog.update(id, engine, undefined, schemas, tables);
 }

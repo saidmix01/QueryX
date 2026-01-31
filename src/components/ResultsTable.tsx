@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Clock, Rows3, ChevronLeft, ChevronRight, X, Copy, Check, Edit2, Save, XCircle, Trash2, Key, Plus, Minus, Search, Pin, Square, Plus as PlusIcon } from 'lucide-react';
+import { AlertCircle, Clock, Rows3, ChevronLeft, ChevronRight, X, Copy, Check, Edit2, Save, XCircle, Trash2, Key, Plus, Minus, Search, Plus as PlusIcon } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import Editor from '@monaco-editor/react';
 import clsx from 'clsx';
