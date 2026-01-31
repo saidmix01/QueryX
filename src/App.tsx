@@ -13,16 +13,24 @@ import { ResultPanelsManager } from './components/ResultPanelsManager';
 import { useConnectionStore } from './store/connection-store';
 import { useUIStore } from './store/ui-store';
 import { useWorkspaceStore } from './store/workspace-store';
+import { useQueryStore } from './store/query-store';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { setupWorkspaceAutoSave } from './store/workspace-store';
 import { Database, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { invoke } from '@tauri-apps/api/tauri';
+
+interface LaunchFileContent {
+  path: string;
+  content: string;
+}
 
 function App() {
   const loadConnections = useConnectionStore((s) => s.loadConnections);
   const isConnectionModalOpen = useUIStore((s) => s.isConnectionModalOpen);
   const { activeConnectionId } = useConnectionStore();
   const { restoreWorkspace } = useWorkspaceStore();
+  const { addTab } = useQueryStore();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useGlobalShortcuts();
@@ -37,6 +45,30 @@ function App() {
       restoreWorkspace(activeConnectionId);
     }
   }, [activeConnectionId, restoreWorkspace]);
+
+  // Check for launch file
+  useEffect(() => {
+    async function checkLaunchFile() {
+      try {
+        const fileData = await invoke<LaunchFileContent | null>('get_launch_file');
+        if (fileData) {
+          const { path, content } = fileData;
+          // Extract filename for title
+          const fileName = path.split(/[\\/]/).pop() || 'Untitled.sql';
+          
+          addTab({
+            title: fileName,
+            query: content,
+            connectionId: useConnectionStore.getState().activeConnectionId || '',
+          });
+        }
+      } catch (error) {
+        console.error('Failed to open launch file:', error);
+      }
+    }
+    
+    checkLaunchFile();
+  }, [addTab]); // Run once on mount (addTab is stable)
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-dark-bg">

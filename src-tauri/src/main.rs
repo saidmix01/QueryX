@@ -9,7 +9,7 @@ mod commands;
 mod domain;
 mod infrastructure;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tokio::sync::OnceCell;
 
@@ -25,7 +25,44 @@ fn main() {
 
     tauri::Builder::default()
         .setup(|app| {
+            // Capture launch args for file association
+            let args: Vec<String> = std::env::args().collect();
+            let mut launch_file_path = None;
+            for arg in args.iter().skip(1) {
+                if arg.to_lowercase().ends_with(".sql") {
+                    launch_file_path = Some(arg.clone());
+                    break;
+                }
+            }
+            app.manage(LaunchFile(Mutex::new(launch_file_path)));
+
             let app_handle = app.handle();
+            
+            // Linux-specific window configuration
+            #[cfg(target_os = "linux")]
+            {
+                use tauri::Manager;
+                // Detect Wayland
+                if std::env::var("WAYLAND_DISPLAY").is_ok() {
+                    println!("[Linux] Running on Wayland. Applying compatibility fixes.");
+                } else {
+                    println!("[Linux] Running on X11.");
+                }
+
+                if let Some(window) = app.get_window("main") {
+                    println!("[Linux] Enforcing window decorations and disabling transparency artifacts.");
+                    // Force decorations to avoid click-through issues on some compositors
+                    if let Err(e) = window.set_decorations(true) {
+                        eprintln!("[Linux] Failed to set decorations: {}", e);
+                    }
+                    
+                    // On Linux, maximizing on startup with custom decorations can sometimes be buggy.
+                    // Ensuring it's visible and focused.
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
             let data_dir = app_handle
                 .path_resolver()
                 .app_data_dir()
@@ -136,6 +173,8 @@ fn main() {
             get_all_workspaces,
             // Export commands
             export_results_xlsx,
+            // App commands
+            get_launch_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

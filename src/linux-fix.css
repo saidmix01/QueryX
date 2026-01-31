@@ -1,0 +1,23 @@
+/* linux-fix.css */
+.is-linux html, .is-linux body, .is-linux #root {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  background-color: #0f0f0f !important; /* Force solid background */
+}
+
+/* Disable problematic effects */
+.is-linux * {
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+/* Fix for invisible overlays */
+.is-linux div[style*="opacity: 0"], 
+.is-linux div[style*="opacity:0"] {
+  display: none !important;
+}
+
+/* Ensure main container is clickable */
+.is-linux .app-container {
+  pointer-events: auto !important;
+}

@@ -63,7 +63,12 @@
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
-        "timestampUrl": ""
+        "timestampUrl": "",
+        "wix": {
+          "template": "wix/main.wxs",
+          "fragmentPaths": ["wix/registry.wxs"],
+          "componentRefs": []
+        }
       }
     },
     "security": {
