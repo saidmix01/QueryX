@@ -62,7 +62,7 @@ export const useResultPanelsStore = create<ResultPanelsState>((set, get) => ({
     }
   },
 
-  ensurePanelForStatement: ({ id, query, connectionId, result, affectedRows, executedAt }) => {
+  ensurePanelForStatement: ({ id, query, connectionId, result, executedAt }) => {
     const existing = get().panels.find((p) => p.id === id);
     const base: QueryResultPanel = {
       id,

@@ -96,9 +96,6 @@ export function TableSelector() {
                       <span className="text-primary-400">{table.schema}.</span>
                     )}
                     <span>{table.name}</span>
-                    <span className="ml-2 text-xs text-dark-muted">
-                      ({table.type})
-                    </span>
                   </div>
                 </button>
               ))

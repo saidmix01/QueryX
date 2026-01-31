@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Database, History, Layers, Plus, BookMarked } from 'lucide-react';
+import { Database, History, Plus, BookMarked } from 'lucide-react';
 import { useUIStore } from '../store/ui-store';
 import { DatabaseTree } from './DatabaseTree';
 import { QueryHistory } from './QueryHistory';

@@ -1,3 +1,5 @@
+import type { DatabaseEngine } from '../domain/types';
+
 /**
  * Analizador de queries SQL para determinar si son editables
  */
@@ -154,7 +156,7 @@ export function generateUpdateStatement(
   schemaName: string | null,
   updates: Map<string, any>,
   primaryKeys: Map<string, any>,
-  engine: 'postgresql' | 'mysql' | 'sqlite'
+  engine: DatabaseEngine
 ): string {
   const fullTableName = schemaName 
     ? quoteIdentifier(schemaName, engine) + '.' + quoteIdentifier(tableName, engine)
@@ -186,7 +188,7 @@ export function generateDeleteStatement(
   tableName: string,
   schemaName: string | null,
   primaryKeys: Map<string, any>,
-  engine: 'postgresql' | 'mysql' | 'sqlite'
+  engine: DatabaseEngine
 ): string {
   const fullTableName = schemaName 
     ? quoteIdentifier(schemaName, engine) + '.' + quoteIdentifier(tableName, engine)
@@ -208,12 +210,15 @@ export function generateDeleteStatement(
 /**
  * Quote identifier según el motor SQL
  */
-function quoteIdentifier(name: string, engine: 'postgresql' | 'mysql' | 'sqlite'): string {
+function quoteIdentifier(name: string, engine: DatabaseEngine): string {
   switch (engine) {
     case 'mysql':
       return `\`${name}\``;
     case 'postgresql':
     case 'sqlite':
+    case 'sqlserver':
+      return `"${name}"`;
+    default:
       return `"${name}"`;
   }
 }

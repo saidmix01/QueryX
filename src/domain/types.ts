@@ -1,6 +1,6 @@
 // Tipos del dominio - Espejo de las entidades Rust
 
-export type DatabaseEngine = 'postgresql' | 'mysql' | 'sqlite';
+export type DatabaseEngine = 'postgresql' | 'mysql' | 'sqlite' | 'sqlserver';
 
 export interface SslConfig {
   enabled: boolean;

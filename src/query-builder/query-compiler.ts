@@ -86,7 +86,7 @@ export class QueryToSqlCompiler {
       .join('\n');
   }
 
-  private compileWhere(group: ConditionGroup): string {
+  public compileWhere(group: ConditionGroup): string {
     const clause = this.compileConditionGroup(group);
     return clause ? `WHERE ${clause}` : '';
   }

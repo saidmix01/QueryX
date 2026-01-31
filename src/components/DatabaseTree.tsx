@@ -15,11 +15,6 @@ import {
   Code,
   ListOrdered,
   Loader2,
-  Edit,
-  Trash2,
-  Plug,
-  PlugZap,
-  MoreVertical,
 } from 'lucide-react';
 import { useUIStore } from '../store/ui-store';
 import clsx from 'clsx';
@@ -28,8 +23,10 @@ import { useConnectionStore } from '../store/connection-store';
 import { useQueryStore } from '../store/query-store';
 import { useSchemaStore } from '../store/schema-store';
 import { ContextMenu } from './ContextMenu';
-import type { DatabaseEngine, Connection } from '../domain/types';
+import type { DatabaseEngine, Connection, CellValue } from '../domain/types';
+import { queryApi } from '../infrastructure/tauri-api';
 import { ensureDefaultSchemaInitialized } from '../utils/schema-init';
+import { AdminAdapterFactory } from '../infrastructure/admin-adapters';
 
 interface FlattenedNode {
   node: TreeNode;
@@ -42,6 +39,12 @@ const engineIcons: Record<string, string> = {
   postgresql: '🐘',
   mysql: '🐬',
   sqlite: '📦',
+};
+
+// Helper para extraer valor de CellValue
+const getCellValue = (cell: CellValue | undefined): any => {
+  if (!cell || cell.type === 'Null') return null;
+  return (cell as any).value;
 };
 
 // Helper para generar identificadores SQL según el motor
@@ -441,6 +444,164 @@ export function DatabaseTree() {
       const connection = connections.find(c => c.id === connectionId);
       const engine = connection?.engine || 'postgresql';
 
+      if (node.type === 'users-folder') {
+        items.push(
+          {
+            label: 'Create User',
+            action: () => {
+              const tabId = addTab({
+                type: 'admin',
+                title: 'New User',
+                connectionId,
+                adminState: {
+                  type: 'user',
+                  mode: 'create',
+                  engine,
+                  initialDefinition: { name: '', roles: [] },
+                },
+              });
+              setActiveTab(tabId);
+            },
+          },
+          { label: '', action: () => {}, separator: true },
+          {
+            label: 'Refresh',
+            action: () => {
+              if (connectionId) {
+                refreshNode(node.id, connectionId);
+              }
+            },
+          }
+        );
+        return items;
+      }
+
+      if (node.type === 'user') {
+        items.push(
+          {
+            label: 'Edit User',
+            action: async () => {
+              try {
+                const adapter = AdminAdapterFactory.getAdapter(engine);
+                const executor = async (sql: string) => {
+                  const res = await queryApi.execute(connectionId, sql);
+                  if (!res.rows) return [];
+                  return res.rows.map(row => {
+                    const obj: Record<string, any> = {};
+                    res.columns.forEach((col, i) => {
+                      obj[col.name] = getCellValue(row[i]);
+                    });
+                    return obj;
+                  });
+                };
+                const definition = await adapter.getUserDefinition(node.name, executor);
+                
+                const tabId = addTab({
+                  type: 'admin',
+                  title: `Edit ${node.name}`,
+                  connectionId,
+                  adminState: {
+                    type: 'user',
+                    mode: 'edit',
+                    engine,
+                    initialDefinition: definition,
+                  },
+                });
+                setActiveTab(tabId);
+              } catch (error) {
+                console.error('Failed to load user definition:', error);
+              }
+            },
+          },
+          { label: '', action: () => {}, separator: true },
+          {
+            label: 'Drop User',
+            action: () => {
+              // TODO: Confirmation and SQL Preview via Admin Modal?
+              // For now simple SQL execution or tab
+              const adapter = AdminAdapterFactory.getAdapter(engine);
+              const sql = adapter.getDropUserSQL(node.name);
+              const tabId = addTab({ title: `DROP ${node.name}`, query: sql, connectionId });
+              setActiveTab(tabId);
+            },
+            danger: true,
+          }
+        );
+        return items;
+      }
+
+      if (node.type === 'roles-folder') {
+        items.push(
+          {
+            label: 'Create Role',
+            action: () => {
+              const adapter = AdminAdapterFactory.getAdapter(engine);
+              const sql = adapter.getCreateRoleSQL({ name: 'new_role' });
+              const tabId = addTab({ title: 'New Role', query: sql, connectionId });
+              setActiveTab(tabId);
+            },
+          },
+          { label: '', action: () => {}, separator: true },
+          {
+            label: 'Refresh',
+            action: () => {
+              if (connectionId) {
+                refreshNode(node.id, connectionId);
+              }
+            },
+          }
+        );
+        return items;
+      }
+
+      if (node.type === 'role') {
+        items.push(
+          {
+            label: 'Drop Role',
+            action: () => {
+              const adapter = AdminAdapterFactory.getAdapter(engine);
+              const sql = adapter.getDropRoleSQL(node.name);
+              const tabId = addTab({ title: `DROP ${node.name}`, query: sql, connectionId });
+              setActiveTab(tabId);
+            },
+            danger: true,
+          }
+        );
+        return items;
+      }
+
+      if (node.type === 'tables-folder') {
+        items.push(
+          {
+            label: 'Create Table',
+            action: () => {
+              const tabId = addTab({
+                type: 'admin',
+                title: 'New Table',
+                connectionId,
+                adminState: {
+                  type: 'table',
+                  mode: 'create',
+                  engine,
+                  schema: node.metadata?.schema as string,
+                },
+              });
+              setActiveTab(tabId);
+            },
+          },
+          { label: '', action: () => {}, separator: true },
+          {
+            label: 'Refresh',
+            action: () => {
+              if (connectionId) {
+                refreshNode(node.id, connectionId);
+              }
+            },
+          }
+        );
+        return items;
+      }
+
       if (node.type === 'table') {
         const fullTableName = formatTableName(schema, node.name, engine);
         
@@ -450,9 +611,41 @@ export function DatabaseTree() {
             action: () => handleDoubleClick(node),
           },
           {
-            label: 'View Structure',
-            action: () => {
-              // TODO: Abrir panel de estructura
+            label: 'Edit Structure',
+            action: async () => {
+              try {
+                const adapter = AdminAdapterFactory.getAdapter(engine);
+                const executor = async (sql: string) => {
+                  const res = await queryApi.execute(connectionId, sql);
+                  if (!res.rows) return [];
+                  return res.rows.map(row => {
+                    const obj: Record<string, any> = {};
+                    res.columns.forEach((col, i) => {
+                      obj[col.name] = getCellValue(row[i]);
+                    });
+                    return obj;
+                  });
+                };
+                const definition = await adapter.getTableDefinition(schema, node.name, executor);
+                
+                const tabId = addTab({
+                  type: 'admin',
+                  title: `Edit ${node.name}`,
+                  connectionId,
+                  adminState: {
+                    type: 'table',
+                    mode: 'edit',
+                    engine,
+                    initialDefinition: definition,
+                    schema,
+                    table: node.name,
+                  },
+                });
+                setActiveTab(tabId);
+              } catch (error) {
+                console.error('Failed to load table definition:', error);
+                // Could use a toast notification here
+              }
             },
           },
           { label: '', action: () => {}, separator: true },

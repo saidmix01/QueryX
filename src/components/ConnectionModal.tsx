@@ -14,6 +14,7 @@ const defaultPorts: Record<DatabaseEngine, number> = {
   postgresql: 5432,
   mysql: 3306,
   sqlite: 0,
+  sqlserver: 1433,
 };
 
 export function ConnectionModal() {

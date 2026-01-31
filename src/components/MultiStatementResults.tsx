@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom';
 import { ResultsTable } from './ResultsTable';
 import type { QueryResult } from '../domain/types';
 import { useResultPanelsStore } from '../store/result-panels-store';
-import { Square, Pin } from 'lucide-react';
 
 interface StatementResult {
   statement_index: number;

@@ -51,7 +51,7 @@ function quoteIdentifier(name: string, engine: DatabaseEngine): string {
   return `"${name}"`;
 }
 
-function sqlLiteral(value: any, engine: DatabaseEngine): string {
+function sqlLiteral(value: any, _engine: DatabaseEngine): string {
   if (value === null || value === undefined) return 'NULL';
   if (typeof value === 'number') return String(value);
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
