@@ -15,7 +15,13 @@ import {
   Code,
   ListOrdered,
   Loader2,
+  Edit,
+  Trash2,
+  Plug,
+  PlugZap,
+  MoreVertical,
 } from 'lucide-react';
+import { useUIStore } from '../store/ui-store';
 import clsx from 'clsx';
 import { useExplorerStore, TreeNode, TreeNodeType } from '../store/explorer-store';
 import { useConnectionStore } from '../store/connection-store';
@@ -31,6 +37,12 @@ interface FlattenedNode {
 }
 
 const NODE_HEIGHT = 28;
+
+const engineIcons: Record<string, string> = {
+  postgresql: '🐘',
+  mysql: '🐬',
+  sqlite: '📦',
+};
 
 // Helper para generar identificadores SQL según el motor
 function quoteIdentifier(name: string, engine: DatabaseEngine): string {
@@ -59,7 +71,25 @@ function NodeIcon({ type, isExpanded, metadata }: { type: TreeNodeType; isExpand
   
   switch (type) {
     case 'connection':
-      return <Database className={clsx(iconClass, 'text-green-400')} />;
+      const status = metadata?.status as string;
+      const engine = (metadata?.engine as string) || 'postgresql';
+      const icon = engineIcons[engine] || '🐘';
+
+      return (
+        <div className="flex items-center gap-1.5 mr-1">
+          <div
+            className={clsx(
+              'w-2 h-2 rounded-full',
+              status === 'Connected'
+                ? 'bg-green-500'
+                : status === 'Connecting'
+                ? 'bg-yellow-500 animate-pulse'
+                : 'bg-gray-500'
+            )}
+          />
+          <span className="text-xs grayscale-[0.5]">{icon}</span>
+        </div>
+      );
     case 'database':
       return <Database className={clsx(iconClass, 'text-blue-400')} />;
     case 'schema':
@@ -204,26 +234,28 @@ export function DatabaseTree() {
     toggleNode,
     selectNode,
     refreshNode,
-    initializeConnection,
+    syncConnections,
   } = useExplorerStore();
 
-  const { connections, activeConnectionId, connectionStatuses } = useConnectionStore();
+  const { 
+    connections, 
+    activeConnectionId, 
+    connectionStatuses, 
+    connect, 
+    disconnect, 
+    deleteConnection, 
+    setActiveConnection,
+    updateConnection
+  } = useConnectionStore();
+  
   const { addTab, setActiveTab } = useQueryStore();
   const { setSelectedSchema, setSelectedDatabase, clear: clearSchema } = useSchemaStore();
-  const { setActiveConnection, updateConnection, connect } = useConnectionStore();
+  const { openConnectionModal } = useUIStore();
 
-  // Inicializar conexiones activas
+  // Sync connections to explorer tree
   useEffect(() => {
-    for (const conn of connections) {
-      const status = connectionStatuses[conn.id];
-      if (status === 'Connected') {
-        const connNodeId = `connection:${conn.id}`;
-        if (!nodes[connNodeId]) {
-          initializeConnection(conn.id, conn.name, conn.database || '');
-        }
-      }
-    }
-  }, [connections, connectionStatuses, nodes, initializeConnection]);
+    syncConnections(connections, connectionStatuses);
+  }, [connections, connectionStatuses, syncConnections]);
 
   // Flatten tree for virtualization
   const flattenedNodes = useMemo(() => {
@@ -257,6 +289,24 @@ export function DatabaseTree() {
     async (nodeId: string) => {
       const node = nodes[nodeId];
       if (!node) {
+        return;
+      }
+
+      if (node.type === 'connection') {
+        const connectionId = node.metadata?.connectionId as string;
+        const status = node.metadata?.status as string;
+
+        setActiveConnection(connectionId);
+
+        if (status !== 'Connected') {
+          try {
+            await connect(connectionId);
+          } catch (e) {
+            console.error(e);
+            return;
+          }
+        }
+        await toggleNode(nodeId, connectionId);
         return;
       }
       
@@ -353,6 +403,40 @@ export function DatabaseTree() {
       const connectionId = node.metadata?.connectionId as string;
       const schema = node.metadata?.schema as string;
       
+      if (node.type === 'connection') {
+        const status = node.metadata?.status as string;
+        if (status === 'Connected') {
+            items.push({
+                label: 'Disconnect',
+                action: () => disconnect(connectionId)
+            });
+            items.push({
+                label: 'Refresh',
+                action: () => refreshNode(node.id, connectionId)
+            });
+        } else {
+            items.push({
+                label: 'Connect',
+                action: () => connect(connectionId)
+            });
+        }
+        items.push({ separator: true, label: '', action: () => {} });
+        items.push({
+            label: 'Edit Connection',
+            action: () => openConnectionModal(connectionId)
+        });
+        items.push({
+            label: 'Delete Connection',
+            danger: true,
+            action: async () => {
+                if (confirm('Are you sure you want to delete this connection?')) {
+                    await deleteConnection(connectionId);
+                }
+            }
+        });
+        return items;
+      }
+
       // Obtener el engine de la conexión
       const connection = connections.find(c => c.id === connectionId);
       const engine = connection?.engine || 'postgresql';

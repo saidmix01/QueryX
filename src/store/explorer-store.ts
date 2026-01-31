@@ -48,6 +48,7 @@ interface ExplorerState {
 
   // Actions
   initializeConnection: (connectionId: string, connectionName: string, database?: string) => void;
+  syncConnections: (connections: { id: string; name: string; database?: string; engine?: string }[], statuses: Record<string, string>) => void;
   toggleNode: (nodeId: string, connectionId: string) => Promise<void>;
   selectNode: (nodeId: string) => void;
   loadChildren: (nodeId: string, connectionId: string) => Promise<void>;
@@ -137,6 +138,117 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
     });
   },
 
+  syncConnections: (connections, statuses) => {
+    set((state) => {
+      const newNodes = { ...state.nodes };
+      const newRootNodes = connections.map(c => createNodeId('connection', c.id));
+      let stateChanged = false;
+
+      // Check if rootNodes changed
+      if (JSON.stringify(newRootNodes) !== JSON.stringify(state.rootNodes)) {
+        stateChanged = true;
+      }
+
+      connections.forEach(conn => {
+        const nodeId = createNodeId('connection', conn.id);
+        const status = statuses[conn.id] || 'Disconnected';
+        const isConnected = status === 'Connected';
+        const existingNode = newNodes[nodeId];
+
+        // Prepare metadata
+        const metadata = { 
+          connectionId: conn.id, 
+          database: conn.database, 
+          status, 
+          engine: conn.engine 
+        };
+
+        if (existingNode) {
+          // Check for changes to avoid unnecessary updates
+          const currentStatus = existingNode.metadata?.status;
+          const currentName = existingNode.name;
+          
+          if (currentStatus !== status || currentName !== conn.name) {
+             stateChanged = true;
+             newNodes[nodeId] = {
+               ...existingNode,
+               name: conn.name,
+               metadata: { ...existingNode.metadata, ...metadata },
+             };
+          }
+
+          // Handle Disconnected -> Connected transition structure
+          if (isConnected && existingNode.children.length === 0 && conn.database) {
+              // If it's connected but missing children (and has a default DB), initialize structure
+              const dbNodeId = createNodeId('database', conn.id, conn.database);
+              newNodes[nodeId].children = [dbNodeId];
+              newNodes[nodeId].isLoaded = true;
+              
+              if (!newNodes[dbNodeId]) {
+                newNodes[dbNodeId] = {
+                  id: dbNodeId,
+                  type: 'database',
+                  name: conn.database,
+                  parentId: nodeId,
+                  isExpandable: true,
+                  isExpanded: false,
+                  isLoading: false,
+                  isLoaded: false,
+                  children: [],
+                  metadata: { connectionId: conn.id, database: conn.database },
+                };
+              }
+              stateChanged = true;
+          } else if (!isConnected && existingNode.children.length > 0) {
+              // Connected -> Disconnected: Clear children and collapse
+              newNodes[nodeId].children = [];
+              newNodes[nodeId].isExpanded = false;
+              newNodes[nodeId].isLoaded = false;
+              stateChanged = true;
+          }
+        } else {
+          stateChanged = true;
+          // Create new node
+          const shouldBeLoaded = isConnected && !!conn.database;
+          
+          newNodes[nodeId] = {
+            id: nodeId,
+            type: 'connection',
+            name: conn.name,
+            parentId: null,
+            isExpandable: true,
+            isExpanded: false,
+            isLoading: false,
+            isLoaded: shouldBeLoaded,
+            children: [],
+            metadata,
+          };
+
+          if (isConnected && conn.database) {
+             const dbNodeId = createNodeId('database', conn.id, conn.database);
+             newNodes[nodeId].children = [dbNodeId];
+             newNodes[dbNodeId] = {
+                id: dbNodeId,
+                type: 'database',
+                name: conn.database,
+                parentId: nodeId,
+                isExpandable: true,
+                isExpanded: false,
+                isLoading: false,
+                isLoaded: false,
+                children: [],
+                metadata: { connectionId: conn.id, database: conn.database },
+             };
+          }
+        }
+      });
+
+      if (!stateChanged) return state;
+
+      return { nodes: newNodes, rootNodes: newRootNodes };
+    });
+  },
+
   toggleNode: async (nodeId, connectionId) => {
     const { nodes, loadChildren } = get();
     const node = nodes[nodeId];
@@ -184,6 +296,42 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
           expandedNodes,
         };
       });
+
+      // Auto-expansion logic
+      const { nodes: currentNodes, toggleNode } = get();
+      const updatedNode = currentNodes[nodeId];
+      if (!updatedNode) return;
+
+      const expandChild = async (childId: string) => {
+        const child = get().nodes[childId];
+        if (child && !child.isExpanded) {
+          await toggleNode(childId, connectionId);
+        }
+      };
+
+      if (updatedNode.type === 'connection' && updatedNode.children.length === 1) {
+        // Connection -> Single Database
+        await expandChild(updatedNode.children[0]);
+      } else if (updatedNode.type === 'database') {
+        // Database -> 'public' Schema or Single Schema
+        const children = updatedNode.children.map(id => get().nodes[id]).filter(Boolean);
+        const publicSchema = children.find(c => c.type === 'schema' && c.name === 'public');
+        const singleSchema = children.length === 1 && children[0].type === 'schema' ? children[0] : null;
+        
+        const targetSchema = publicSchema || singleSchema;
+        if (targetSchema) {
+            await expandChild(targetSchema.id);
+        }
+      } else if (updatedNode.type === 'schema') {
+        // Schema -> Tables Folder
+        const tablesFolderId = updatedNode.children.find(id => {
+            const child = get().nodes[id];
+            return child && child.type === 'tables-folder';
+        });
+        if (tablesFolderId) {
+            await expandChild(tablesFolderId);
+        }
+      }
     }
   },
 
