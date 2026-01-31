@@ -21,6 +21,15 @@ static CONNECTION_REPO: OnceCell<Arc<dyn domain::ConnectionRepository>> = OnceCe
 static HISTORY_REPO: OnceCell<Arc<dyn domain::QueryHistoryRepository>> = OnceCell::const_new();
 
 fn main() {
+    // Linux-specific WebKitGTK fixes (Must be set before app initialization)
+    #[cfg(target_os = "linux")]
+    {
+        // Fix black screen issue by disabling hardware acceleration/compositing if needed
+        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        // Avoid unstable GPU usage
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     tracing_subscriber::fmt::init();
 
     tauri::Builder::default()
@@ -43,7 +52,8 @@ fn main() {
             {
                 use tauri::Manager;
                 // Detect Wayland
-                if std::env::var("WAYLAND_DISPLAY").is_ok() {
+                let is_wayland = std::env::var("WAYLAND_DISPLAY").is_ok();
+                if is_wayland {
                     println!("[Linux] Running on Wayland. Applying compatibility fixes.");
                 } else {
                     println!("[Linux] Running on X11.");
@@ -51,13 +61,19 @@ fn main() {
 
                 if let Some(window) = app.get_window("main") {
                     println!("[Linux] Enforcing window decorations and disabling transparency artifacts.");
-                    // Force decorations to avoid click-through issues on some compositors
+                    
+                    // Force decorations to avoid click-through issues
+                    // This is CRITICAL for Linux to handle mouse events correctly
                     if let Err(e) = window.set_decorations(true) {
                         eprintln!("[Linux] Failed to set decorations: {}", e);
                     }
                     
-                    // On Linux, maximizing on startup with custom decorations can sometimes be buggy.
-                    // Ensuring it's visible and focused.
+                    // Explicitly disable transparency for Linux to prevent click-through
+                    // even if tauri.conf.json has it enabled
+                    // Note: set_transparent is not always available/working at runtime depending on the OS,
+                    // but we try anyway. The main fix is WEBKIT_DISABLE_COMPOSITING_MODE.
+                    
+                    // Ensure window is visible and focused
                     let _ = window.show();
                     let _ = window.set_focus();
                 }

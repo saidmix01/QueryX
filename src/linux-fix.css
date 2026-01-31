@@ -1,23 +1,68 @@
 /* linux-fix.css */
+
+/* 
+ * LINUX SAFETY MODE 
+ * Specific overrides to fix WebKitGTK/Wayland issues:
+ * - Click-through bugs
+ * - Black screen rendering
+ * - Transparency artifacts
+ */
+
 .is-linux html, .is-linux body, .is-linux #root {
+  /* Force clicks to be received */
   pointer-events: auto !important;
+  /* Ensure full opacity to avoid compositing issues */
   opacity: 1 !important;
-  background-color: #0f0f0f !important; /* Force solid background */
+  /* Solid background color - critical for preventing click-through */
+  background-color: #0b0f0c !important; 
+  /* Disable transparency */
+  background-image: none !important;
 }
 
-/* Disable problematic effects */
+/* Disable expensive/problematic effects on Linux */
 .is-linux * {
   backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   filter: none !important;
+  /* Vibrancy effects often cause black screens on Linux WebKit */
+  mix-blend-mode: normal !important;
 }
 
-/* Fix for invisible overlays */
+/* Fix for invisible overlays/layers that capture clicks */
 .is-linux div[style*="opacity: 0"], 
 .is-linux div[style*="opacity:0"] {
   display: none !important;
+  pointer-events: none !important;
 }
 
-/* Ensure main container is clickable */
-.is-linux .app-container {
+/* Ensure main container and interactive elements are clickable */
+.is-linux .app-container,
+.is-linux button,
+.is-linux a,
+.is-linux input,
+.is-linux textarea,
+.is-linux select,
+.is-linux [role="button"] {
   pointer-events: auto !important;
+}
+
+/* Disable any transparency utility classes on Linux */
+.is-linux .transparent,
+.is-linux [class*="transparent"],
+.is-linux .bg-transparent {
+  background-color: #0b0f0c !important;
+  opacity: 1 !important;
+}
+
+/* Override potential fixed positioning issues */
+.is-linux .fixed-overlay {
+  display: none !important;
+}
+
+/* Ensure modals are visible and opaque */
+.is-linux [role="dialog"],
+.is-linux .modal {
+  background-color: #1a1f1c !important; /* Slightly lighter than bg */
+  opacity: 1 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5) !important;
 }
