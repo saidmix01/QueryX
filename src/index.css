@@ -1,0 +1,224 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-dark-border;
+  }
+
+  body {
+    @apply bg-dark-bg text-dark-text antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  /* Custom scrollbar - Matrix style minimalista */
+  ::-webkit-scrollbar {
+    @apply w-1.5 h-1.5;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-matrix-900 rounded-full;
+    transition: background-color 0.2s;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-matrix-800;
+  }
+
+  ::-webkit-scrollbar-corner {
+    @apply bg-transparent;
+  }
+
+  /* Selection color */
+  ::selection {
+    @apply bg-matrix-800/60 text-matrix-100;
+  }
+
+  /* Monaco Editor custom theme */
+  .monaco-editor {
+    @apply bg-dark-bg;
+  }
+
+  .monaco-editor .margin {
+    @apply bg-dark-surface;
+  }
+
+  .monaco-editor .current-line {
+    border: none !important;
+    background: rgba(0, 230, 118, 0.05) !important;
+  }
+
+  .monaco-editor .selected-text {
+    background: rgba(0, 230, 118, 0.15) !important;
+  }
+}
+
+@layer components {
+  /* Buttons */
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-all duration-150;
+    @apply focus:outline-none focus:ring-2 focus:ring-matrix-500 focus:ring-offset-2 focus:ring-offset-dark-bg;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-matrix-600 text-dark-bg hover:bg-matrix-500 hover:shadow-glow-sm;
+    @apply active:bg-matrix-700 active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply bg-dark-elevated text-dark-text border border-dark-border;
+    @apply hover:bg-dark-hover hover:border-matrix-700 hover:text-matrix-400;
+    @apply active:bg-dark-active;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-dark-text hover:bg-dark-hover hover:text-matrix-400;
+    @apply active:bg-dark-active;
+  }
+
+  .btn-danger {
+    @apply bg-accent-red text-white hover:bg-red-600;
+    @apply active:bg-red-700;
+  }
+
+  /* Inputs */
+  .input {
+    @apply w-full px-3 py-2 rounded-md bg-dark-surface border border-dark-border;
+    @apply text-dark-text placeholder-dark-muted;
+    @apply focus:outline-none focus:ring-2 focus:ring-matrix-500 focus:border-matrix-500;
+    @apply transition-all duration-150;
+  }
+
+  .select {
+    @apply input appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2300e676' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-dark-text mb-1.5;
+  }
+
+  /* Icon buttons */
+  .icon-btn {
+    @apply p-2 rounded-md transition-all duration-150;
+    @apply text-dark-muted hover:text-matrix-400 hover:bg-dark-hover;
+    @apply focus:outline-none focus:ring-2 focus:ring-matrix-500;
+    @apply active:scale-95;
+  }
+
+  .icon-btn-active {
+    @apply text-matrix-400 bg-dark-hover shadow-glow-sm;
+  }
+
+  /* Panel styles */
+  .panel {
+    @apply bg-dark-surface border border-dark-border rounded-lg;
+  }
+
+  .panel-header {
+    @apply px-4 py-3 border-b border-dark-border flex items-center justify-between;
+    @apply bg-dark-elevated;
+  }
+
+  /* Status indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-connected {
+    @apply bg-matrix-500 shadow-glow-sm animate-pulse-glow;
+  }
+
+  .status-disconnected {
+    @apply bg-dark-muted;
+  }
+
+  .status-error {
+    @apply bg-accent-red shadow-[0_0_8px_rgba(255,82,82,0.4)];
+  }
+
+  /* Tabs */
+  .tab {
+    @apply px-4 py-2.5 text-sm font-medium transition-all duration-150;
+    @apply border-b-2 border-transparent relative;
+  }
+
+  .tab-active {
+    @apply text-matrix-400 border-matrix-500 bg-dark-hover/50;
+  }
+
+  .tab-inactive {
+    @apply text-dark-muted hover:text-dark-text hover:bg-dark-hover/30;
+  }
+
+  /* Keyboard shortcuts */
+  kbd {
+    @apply px-2 py-1 text-xs font-mono bg-dark-surface border border-dark-border rounded;
+    @apply text-matrix-400 shadow-sm;
+  }
+
+  /* Tooltips */
+  .tooltip {
+    @apply absolute z-50 px-2 py-1 text-xs bg-dark-elevated border border-dark-border rounded;
+    @apply shadow-lg pointer-events-none;
+  }
+
+  /* Context menu */
+  .context-menu {
+    @apply bg-dark-surface border border-dark-border rounded-lg shadow-xl;
+    @apply py-1 min-w-[180px];
+  }
+
+  .context-menu-item {
+    @apply px-3 py-2 text-sm hover:bg-dark-hover transition-colors;
+    @apply flex items-center gap-2 cursor-pointer;
+  }
+
+  /* Resize handles */
+  .resize-handle {
+    @apply bg-dark-border hover:bg-matrix-700 transition-all;
+    @apply relative group;
+  }
+
+  .resize-handle-horizontal {
+    @apply w-1 cursor-col-resize;
+  }
+
+  .resize-handle-vertical {
+    @apply h-1 cursor-row-resize;
+  }
+}
+
+@layer utilities {
+  /* Text utilities */
+  .text-glow {
+    text-shadow: 0 0 10px rgba(0, 230, 118, 0.5);
+  }
+
+  .text-glow-strong {
+    text-shadow: 0 0 15px rgba(0, 230, 118, 0.7);
+  }
+
+  /* Animation utilities */
+  .animate-slide-in {
+    animation: slide-in 0.15s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.15s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+  }
+}

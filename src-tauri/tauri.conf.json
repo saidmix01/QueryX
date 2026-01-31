@@ -1,0 +1,89 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:5173",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "QueryX",
+    "version": "1.0.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "open": true
+      },
+      "fs": {
+        "all": true,
+        "scope": ["$APP/*", "$APPDATA/*", "$APPCONFIG/*", "$DESKTOP/*", "$DOCUMENT/*", "$DOWNLOAD/*"]
+      },
+      "path": {
+        "all": true
+      },
+      "dialog": {
+        "all": true
+      },
+      "window": {
+        "all": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "category": "DeveloperTool",
+      "copyright": "© 2024-2026 QueryX",
+      "deb": {
+        "depends": [
+          "libssl3",
+          "libsecret-1-0"
+        ]
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      },
+      "externalBin": [],
+      "icon": [
+        "icons/icon.ico",
+        "icons/icon.png"
+      ],
+      "identifier": "com.queryx.app",
+      "longDescription": "QueryX - Professional SQL Database Manager with multi-engine support for PostgreSQL, MySQL, and SQLite",
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null,
+        "minimumSystemVersion": "10.13"
+      },
+      "resources": [],
+      "shortDescription": "Professional SQL Database Manager",
+      "targets": "all",
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "updater": {
+      "active": false
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "height": 800,
+        "resizable": true,
+        "title": "QueryX - Professional SQL Database Manager",
+        "width": 1200,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": false,
+        "maximized": true
+      }
+    ]
+  }
+}
