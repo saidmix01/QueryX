@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Clock, Rows3, ChevronLeft, ChevronRight, X, Copy, Check, Edit2, Save, XCircle, Trash2, Key, Plus, Minus, Search, Plus as PlusIcon } from 'lucide-react';
+import { AlertCircle, Clock, Rows3, ChevronLeft, ChevronRight, X, Copy, Check, Edit2, Save, XCircle, Trash2, Key, Plus, Minus, Search, Plus as PlusIcon, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import Editor from '@monaco-editor/react';
 import clsx from 'clsx';
@@ -595,6 +595,56 @@ export function ResultsTable({ tab }: ResultsTableProps) {
   const [pendingDeleteStatement, setPendingDeleteStatement] = useState<string>('');
   const [, setPendingDeleteRowIndex] = useState<number | null>(null);
 
+  // Estado para filtro y ordenamiento local
+  const [filterText, setFilterText] = useState('');
+  const [sortConfig, setSortConfig] = useState<{ key: number; direction: 'asc' | 'desc' } | null>(null);
+
+  // Filas procesadas (filtradas y ordenadas) con su índice original
+  const processedRows = useMemo(() => {
+    if (!result) return [];
+    
+    // Mapear filas con su índice original para mantener la referencia de edición
+    let rows = result.rows.map((row, index) => ({ row, index }));
+
+    // 1. Filtrar
+    if (filterText.trim()) {
+      const lowerFilter = filterText.toLowerCase();
+      rows = rows.filter(({ row }) => 
+        row.some(cell => formatFullValue(cell).toLowerCase().includes(lowerFilter))
+      );
+    }
+
+    // 2. Ordenar
+    if (sortConfig) {
+      rows.sort((a, b) => {
+        const cellA = a.row[sortConfig.key];
+        const cellB = b.row[sortConfig.key];
+        
+        const valA = cellValueToRaw(cellA);
+        const valB = cellValueToRaw(cellB);
+
+        if (valA === valB) return 0;
+        if (valA === null) return 1;
+        if (valB === null) return -1;
+
+        const compareResult = valA < valB ? -1 : 1;
+        return sortConfig.direction === 'asc' ? compareResult : -compareResult;
+      });
+    }
+
+    return rows;
+  }, [result, filterText, sortConfig]);
+
+  const handleSort = (columnIndex: number) => {
+    setSortConfig(current => {
+      if (current?.key === columnIndex) {
+        if (current.direction === 'asc') return { key: columnIndex, direction: 'desc' };
+        return null;
+      }
+      return { key: columnIndex, direction: 'asc' };
+    });
+  };
+
   // Analizar si la query es editable
   const queryAnalysis = useMemo(() => {
     if (!query || !result) return null;
@@ -1092,12 +1142,24 @@ export function ResultsTable({ tab }: ResultsTableProps) {
               <option value="AND">AND</option>
               <option value="OR">OR</option>
             </select>
+            <div className="relative">
+              <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-dark-muted" />
+              <input 
+                type="text" 
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder="Buscar en resultados..."
+                className="pl-7 pr-2 py-1 bg-dark-surface border border-dark-border/50 rounded text-xs focus:outline-none focus:border-matrix-500 w-48 transition-all focus:w-64"
+              />
+            </div>
+            <div className="w-px h-4 bg-dark-border/30 mx-1" />
+
             <button
               onClick={addFilterRow}
               className="btn btn-secondary px-2 py-1 text-xs flex items-center gap-1"
             >
               <Plus className="w-3 h-3" />
-              Añadir filtro
+              Filtro SQL
             </button>
             <button
               onClick={applyFilters}
@@ -1164,7 +1226,8 @@ export function ResultsTable({ tab }: ResultsTableProps) {
                 return (
                   <th
                     key={i}
-                    className="px-3 py-2 text-left font-semibold text-matrix-400/90 border-b border-dark-border/50 whitespace-nowrap"
+                    className="px-3 py-2 text-left font-semibold text-matrix-400/90 border-b border-dark-border/50 whitespace-nowrap cursor-pointer hover:bg-dark-surface/50 transition-colors select-none group"
+                    onClick={() => handleSort(i)}
                   >
                     <div className="flex items-center gap-1.5">
                       {isPrimaryKey && <Key className="w-3 h-3 text-yellow-500" />}
@@ -1172,6 +1235,11 @@ export function ResultsTable({ tab }: ResultsTableProps) {
                       <span className="text-[10px] text-dark-muted/60 font-normal">
                         {col.data_type}
                       </span>
+                      {sortConfig?.key === i ? (
+                        sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-matrix-500" /> : <ArrowDown className="w-3 h-3 text-matrix-500" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-dark-muted/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
                     </div>
                   </th>
                 );
@@ -1179,7 +1247,7 @@ export function ResultsTable({ tab }: ResultsTableProps) {
             </tr>
           </thead>
           <tbody>
-            {result.rows.map((row, rowIdx) => {
+            {processedRows.map(({ row, index: rowIdx }) => {
               const hasRowEdits = editedRows.has(rowIdx);
               return (
                 <tr
