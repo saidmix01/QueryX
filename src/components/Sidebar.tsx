@@ -5,6 +5,7 @@ import { DatabaseTree } from './DatabaseTree';
 import { QueryHistory } from './QueryHistory';
 import { SavedQueriesPanel } from './SavedQueriesPanel';
 import clsx from 'clsx';
+import { useState } from 'react';
 
 type SidebarView = 'explorer' | 'history' | 'saved-queries';
 
@@ -14,6 +15,92 @@ const navItems: { id: SidebarView; icon: typeof Database; label: string }[] = [
   { id: 'history', icon: History, label: 'History' },
 ];
 
+function SidebarItem({
+  id,
+  icon: Icon,
+  label,
+  isActive,
+  onClick,
+}: {
+  id: string;
+  icon: typeof Database;
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <motion.button
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className={clsx(
+        'w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 relative',
+        isActive
+          ? 'bg-matrix-900/50 text-matrix-400 shadow-glow-sm'
+          : 'text-dark-muted hover:text-matrix-400 hover:bg-dark-hover/50'
+      )}
+    >
+      <Icon className="w-4 h-4" />
+      {/* Indicador activo */}
+      {isActive && (
+        <motion.div
+          layoutId="activeTab"
+          className="absolute -right-px top-1.5 bottom-1.5 w-0.5 bg-matrix-500 rounded-l"
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+        />
+      )}
+      {/* Tooltip */}
+      <AnimatePresence>
+        {isHovered && (
+          <motion.span
+            initial={{ opacity: 0, x: -5 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-full ml-2 px-2 py-1 bg-dark-elevated/95 backdrop-blur-sm border border-dark-border/50 rounded text-xs whitespace-nowrap pointer-events-none z-50 shadow-lg"
+          >
+            {label}
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </motion.button>
+  );
+}
+
+function NewConnectionButton({ onClick }: { onClick: () => void }) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <motion.button
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className="w-8 h-8 rounded-md flex items-center justify-center text-matrix-500 hover:bg-matrix-900/50 hover:text-matrix-400 transition-all duration-150 relative"
+    >
+      <Plus className="w-4 h-4" />
+      <AnimatePresence>
+        {isHovered && (
+          <motion.span
+            initial={{ opacity: 0, x: -5 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-full ml-2 px-2 py-1 bg-dark-elevated/95 backdrop-blur-sm border border-dark-border/50 rounded text-xs whitespace-nowrap pointer-events-none z-50 shadow-lg"
+          >
+            New Connection
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </motion.button>
+  );
+}
+
 export function Sidebar() {
   const { sidebarView, setSidebarView, openConnectionModal } = useUIStore();
 
@@ -21,49 +108,21 @@ export function Sidebar() {
     <div className="h-full flex bg-dark-surface/50 backdrop-blur-sm border-r border-dark-border/50">
       {/* Icon Navigation - Barra lateral de íconos ultra minimalista */}
       <div className="w-10 bg-dark-bg/50 border-r border-dark-border/30 flex flex-col items-center py-2 gap-0.5">
-        {navItems.map(({ id, icon: Icon, label }) => (
-          <motion.button
+        {navItems.map(({ id, icon, label }) => (
+          <SidebarItem
             key={id}
+            id={id}
+            icon={icon}
+            label={label}
+            isActive={sidebarView === id}
             onClick={() => setSidebarView(id)}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className={clsx(
-              'w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 relative group',
-              sidebarView === id
-                ? 'bg-matrix-900/50 text-matrix-400 shadow-glow-sm'
-                : 'text-dark-muted hover:text-matrix-400 hover:bg-dark-hover/50'
-            )}
-          >
-            <Icon className="w-4 h-4" />
-            {/* Indicador activo */}
-            {sidebarView === id && (
-              <motion.div
-                layoutId="activeTab"
-                className="absolute -right-px top-1.5 bottom-1.5 w-0.5 bg-matrix-500 rounded-l"
-                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              />
-            )}
-            {/* Tooltip */}
-            <span className="absolute left-full ml-2 px-2 py-1 bg-dark-elevated/95 backdrop-blur-sm border border-dark-border/50 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
-              {label}
-            </span>
-          </motion.button>
+          />
         ))}
 
         <div className="flex-1" />
 
         {/* New Connection Button */}
-        <motion.button
-          onClick={() => openConnectionModal()}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="w-8 h-8 rounded-md flex items-center justify-center text-matrix-500 hover:bg-matrix-900/50 hover:text-matrix-400 transition-all duration-150 group relative"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="absolute left-full ml-2 px-2 py-1 bg-dark-elevated/95 backdrop-blur-sm border border-dark-border/50 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
-            New Connection
-          </span>
-        </motion.button>
+        <NewConnectionButton onClick={openConnectionModal} />
       </div>
 
       {/* Content Area */}

@@ -86,7 +86,7 @@
         "width": 1200,
         "minWidth": 900,
         "minHeight": 600,
-        "decorations": true,
+        "decorations": false,
         "maximized": true,
         "transparent": false,
         "skipTaskbar": false,
