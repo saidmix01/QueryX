@@ -251,7 +251,7 @@ export function DatabaseTree() {
     updateConnection
   } = useConnectionStore();
   
-  const { addTab, setActiveTab } = useQueryStore();
+  const { addTab, setActiveTab, executeQuery, tabs } = useQueryStore();
   const { setSelectedSchema, setSelectedDatabase, clear: clearSchema } = useSchemaStore();
   const { openConnectionModal } = useUIStore();
 
@@ -377,9 +377,12 @@ export function DatabaseTree() {
           connectionId,
         });
         setActiveTab(tabId);
+        if (tabs.length === 0) {
+          executeQuery(tabId, query);
+        }
       }
     },
-    [addTab, setActiveTab, connections]
+    [addTab, setActiveTab, executeQuery, connections, tabs.length]
   );
 
   const handleContextMenu = useCallback(
