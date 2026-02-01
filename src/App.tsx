@@ -18,6 +18,8 @@ import { setupWorkspaceAutoSave } from './store/workspace-store';
 import { Database, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { invoke } from '@tauri-apps/api/tauri';
+import { NotificationCenter } from './components/NotificationCenter';
+import { setupGlobalErrorHandlers } from './utils/global-error-handler';
 
 interface LaunchFileContent {
   path: string;
@@ -33,6 +35,9 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useGlobalShortcuts();
+  useEffect(() => {
+    setupGlobalErrorHandlers();
+  }, []);
 
   useEffect(() => {
     loadConnections();
@@ -139,6 +144,7 @@ function App() {
       <WorkspaceRestoreIndicator />
       <AboutModal />
       <ResultPanelsManager />
+      <NotificationCenter />
     </div>
   );
 }

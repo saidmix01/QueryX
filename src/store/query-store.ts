@@ -2,9 +2,25 @@ import { create } from 'zustand';
 import type { QueryHistoryEntry, QueryResult } from '../domain/types';
 import { queryApi } from '../infrastructure/tauri-api';
 import { useResultPanelsStore } from './result-panels-store';
+import { useNotificationStore } from './notification-store';
 
 import { DatabaseEngine } from '../domain/types';
 import { TableDefinition, UserDefinition, RoleDefinition } from '../domain/admin-types';
+
+function isCancellation(e: unknown): boolean {
+  if (!e) return false;
+  if (typeof e === 'string') {
+    const s = e.toLowerCase();
+    return s.includes('cancel') || s.includes('canceled') || s.includes('cancelled');
+  }
+  if (typeof e === 'object') {
+    const anyE = e as any;
+    const type = String(anyE?.type || '').toLowerCase();
+    const msg = String(anyE?.msg || anyE?.message || '').toLowerCase();
+    return type.includes('cancel') || msg.includes('cancel');
+  }
+  return false;
+}
 
 export interface AdminTabState {
   type: 'table' | 'user' | 'role';
@@ -165,7 +181,25 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         connectionId: tab.connectionId,
         result,
       });
+      useNotificationStore.getState().info('Consulta ejecutada con éxito', {
+        variant: 'toast',
+        source: 'business',
+        autoCloseMs: 10000,
+      });
     } catch (e) {
+      if (isCancellation(e)) {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId ? { ...t, isExecuting: false } : t
+          ),
+        }));
+        useNotificationStore.getState().info('Consulta cancelada', {
+          variant: 'toast',
+          source: 'business',
+          autoCloseMs: 10000,
+        });
+        return;
+      }
       // Extract error message from Tauri error object
       let errorMessage = 'Unknown error';
       if (typeof e === 'string') {
@@ -193,6 +227,12 @@ export const useQueryStore = create<QueryState>((set, get) => ({
             : t
         ),
       }));
+      useNotificationStore.getState().error(errorMessage, {
+        variant: 'toast',
+        source: 'ipc',
+        autoCloseMs: 10000,
+        persistent: false,
+      });
     }
   },
 
@@ -235,7 +275,25 @@ export const useQueryStore = create<QueryState>((set, get) => ({
           executedAt: new Date().toISOString(),
         });
       });
+      useNotificationStore.getState().info('Múltiples statements ejecutados', {
+        variant: 'toast',
+        source: 'business',
+        autoCloseMs: 10000,
+      });
     } catch (e) {
+      if (isCancellation(e)) {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId ? { ...t, isExecuting: false } : t
+          ),
+        }));
+        useNotificationStore.getState().info('Consulta cancelada', {
+          variant: 'toast',
+          source: 'business',
+          autoCloseMs: 10000,
+        });
+        return;
+      }
       let errorMessage = 'Unknown error';
       if (typeof e === 'string') {
         errorMessage = e;
@@ -260,6 +318,12 @@ export const useQueryStore = create<QueryState>((set, get) => ({
             : t
         ),
       }));
+      useNotificationStore.getState().error(errorMessage, {
+        variant: 'toast',
+        source: 'ipc',
+        autoCloseMs: 10000,
+        persistent: false,
+      });
     }
   },
 
@@ -272,6 +336,11 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         t.id === tabId ? { ...t, isExecuting: false } : t
       ),
     }));
+    useNotificationStore.getState().info('Consulta cancelada', {
+      variant: 'toast',
+      source: 'business',
+      autoCloseMs: 10000,
+    });
   },
 
   loadHistory: async (connectionId) => {

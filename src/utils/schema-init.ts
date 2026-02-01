@@ -31,7 +31,10 @@ export async function ensureDefaultSchemaInitialized(
       db = list.find((d) => d !== 'postgres' && !d.startsWith('template')) || list[0] || 'postgres';
       const { updateConnection, connect } = useConnectionStore.getState();
       await updateConnection(id, { database: db });
-      await connect(id);
+      const status = useConnectionStore.getState().connectionStatuses[id];
+      if (status !== 'Connected') {
+        await connect(id);
+      }
     }
     await loadSchemas(id, db);
     const schemas = getSchemas(id) || [];

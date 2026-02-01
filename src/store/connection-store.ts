@@ -6,6 +6,7 @@ import type {
   UpdateConnectionDto,
 } from '../domain/types';
 import { connectionApi } from '../infrastructure/tauri-api';
+import { useNotificationStore } from './notification-store';
 
 interface ConnectionState {
   connections: Connection[];
@@ -40,6 +41,12 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
       set({ connections, isLoading: false });
     } catch (e) {
       set({ error: String(e), isLoading: false });
+      useNotificationStore.getState().error(String(e), {
+        variant: 'toast',
+        source: 'ipc',
+        persistent: false,
+        autoCloseMs: 10000,
+      });
     }
   },
 
@@ -82,12 +89,27 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
   },
 
   deleteConnection: async (id) => {
-    await connectionApi.delete(id);
-    set((state) => ({
-      connections: state.connections.filter((c) => c.id !== id),
-      activeConnectionId:
-        state.activeConnectionId === id ? null : state.activeConnectionId,
-    }));
+    try {
+      await connectionApi.delete(id);
+      set((state) => ({
+        connections: state.connections.filter((c) => c.id !== id),
+        activeConnectionId:
+          state.activeConnectionId === id ? null : state.activeConnectionId,
+      }));
+      useNotificationStore.getState().info('Conexión eliminada', {
+        variant: 'toast',
+        source: 'ui',
+        autoCloseMs: 3000,
+      });
+    } catch (e) {
+      useNotificationStore.getState().error(String(e), {
+        variant: 'toast',
+        source: 'ipc',
+        persistent: false,
+        autoCloseMs: 6000,
+      });
+      throw e;
+    }
   },
 
   testConnection: async (id) => {
@@ -116,15 +138,32 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
           [id]: { Error: String(e) },
         },
       }));
+      useNotificationStore.getState().error(String(e), {
+        variant: 'toast',
+        source: 'ipc',
+        autoCloseMs: 10000,
+        persistent: false,
+      });
       throw e;
     }
   },
 
   disconnect: async (id) => {
-    await connectionApi.disconnect(id);
-    set((state) => ({
-      connectionStatuses: { ...state.connectionStatuses, [id]: 'Disconnected' },
-    }));
+    try {
+      await connectionApi.disconnect(id);
+      set((state) => ({
+        connectionStatuses: { ...state.connectionStatuses, [id]: 'Disconnected' },
+        activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId,
+      }));
+    } catch (e) {
+      useNotificationStore.getState().error(String(e), {
+        variant: 'toast',
+        source: 'ipc',
+        autoCloseMs: 10000,
+        persistent: false,
+      });
+      throw e;
+    }
   },
 
   setActiveConnection: (id) => {

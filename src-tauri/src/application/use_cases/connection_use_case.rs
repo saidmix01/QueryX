@@ -119,6 +119,46 @@ impl ConnectionUseCase {
     }
 
     pub async fn connect(&self, id: Uuid) -> Result<(), DomainError> {
+        // Idempotencia y prevención de duplicados
+        // Si ya está conectado, devolver OK. Si está conectando, evitar doble inicio.
+        // Si existe un driver previo con estado de error/desconectado, cerrarlo limpiamente antes de reconectar.
+        {
+            let active = self.active_connections.read().await;
+            if let Some((_, status)) = active.get(&id) {
+                match status {
+                    ConnectionStatus::Connected => {
+                        return Ok(());
+                    }
+                    ConnectionStatus::Connecting => {
+                        return Err(DomainError::connection("Connection already in progress"));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Si había una entrada previa no conectada, eliminarla y desconectar el driver fuera del lock
+        let prev_driver_to_close: Option<Arc<dyn SqlDriver>> = {
+            let mut active = self.active_connections.write().await;
+            if let Some((driver, status)) = active.get(&id) {
+                match status {
+                    ConnectionStatus::Connected => None,
+                    ConnectionStatus::Connecting => None,
+                    _ => {
+                        let (driver, _) = active.remove(&id).unwrap();
+                        Some(driver)
+                    }
+                }
+            } else {
+                None
+            }
+        };
+        if let Some(drv) = prev_driver_to_close {
+            if let Err(e) = drv.disconnect().await {
+                tracing::warn!("Failed to gracefully close previous driver: {}", e);
+            }
+        }
+
         let connection = self.get_connection(id).await?;
         let password = self.credential_store.retrieve(id).await?.unwrap_or_default();
         let conn_string = self.build_connection_string(&connection, &password);
