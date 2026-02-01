@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Database, History, Plus, BookMarked } from 'lucide-react';
 import { useUIStore } from '../store/ui-store';
 import { DatabaseTree } from './DatabaseTree';
@@ -70,26 +70,38 @@ export function Sidebar() {
 
       {/* Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header - Más compacto */}
-        <div className="px-3 py-2 border-b border-dark-border/50 bg-dark-elevated/30">
-          <h2 className="text-xs font-semibold text-matrix-400/90 uppercase tracking-wider">
-            {navItems.find((item) => item.id === sidebarView)?.label}
-          </h2>
+        {/* Header - Más compacto con animación */}
+        <div className="px-3 py-2 border-b border-dark-border/50 bg-dark-elevated/30 relative overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.h2
+              key={sidebarView}
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 5 }}
+              transition={{ duration: 0.12 }}
+              className="text-xs font-semibold text-matrix-400/90 uppercase tracking-wider"
+            >
+              {navItems.find((item) => item.id === sidebarView)?.label}
+            </motion.h2>
+          </AnimatePresence>
         </div>
 
         {/* Content con animación */}
         <div className="flex-1 overflow-auto">
-          <motion.div
-            key={sidebarView}
-            initial={{ opacity: 0, x: -5 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.12 }}
-            className="h-full"
-          >
-            {sidebarView === 'explorer' && <DatabaseTree />}
-            {sidebarView === 'saved-queries' && <SavedQueriesPanel />}
-            {sidebarView === 'history' && <QueryHistory />}
-          </motion.div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={sidebarView}
+              initial={{ opacity: 0, x: -5 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 5 }}
+              transition={{ duration: 0.15 }}
+              className="h-full"
+            >
+              {sidebarView === 'explorer' && <DatabaseTree />}
+              {sidebarView === 'saved-queries' && <SavedQueriesPanel />}
+              {sidebarView === 'history' && <QueryHistory />}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </div>
