@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Sidebar } from './components/Sidebar';
 import { MainContent } from './components/MainContent';
@@ -79,21 +78,13 @@ function App() {
       <div className="flex-1 flex overflow-hidden">
         <PanelGroup direction="horizontal">
           {/* Sidebar con colapso */}
-          <AnimatePresence mode="wait">
-            {!sidebarCollapsed && (
-              <Panel defaultSize={16} minSize={12} maxSize={25}>
-                <motion.div
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: -20, opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="h-full"
-                >
-                  <Sidebar />
-                </motion.div>
-              </Panel>
-            )}
-          </AnimatePresence>
+          {!sidebarCollapsed && (
+            <Panel defaultSize={16} minSize={12} maxSize={25}>
+              <div className="h-full">
+                <Sidebar />
+              </div>
+            </Panel>
+          )}
 
           {/* Resize Handle con botón de colapso */}
           {!sidebarCollapsed && (
@@ -110,10 +101,7 @@ function App() {
 
           {/* Botón para expandir sidebar colapsado */}
           {sidebarCollapsed && (
-            <motion.button
-              initial={{ x: -10, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ duration: 0.15 }}
+            <button
               onClick={() => setSidebarCollapsed(false)}
               className="w-7 bg-dark-surface/80 border-r border-dark-border/50 flex flex-col items-center py-3 gap-2 hover:bg-dark-hover hover:w-8 transition-all group"
               title="Expand sidebar (Ctrl+B)"
@@ -121,7 +109,7 @@ function App() {
               <ChevronRight className="w-3.5 h-3.5 text-matrix-400 group-hover:text-matrix-300" />
               <div className="h-px w-3 bg-dark-border/50" />
               <Database className="w-3.5 h-3.5 text-dark-muted group-hover:text-matrix-400" />
-            </motion.button>
+            </button>
           )}
 
           {/* Main Content Area */}

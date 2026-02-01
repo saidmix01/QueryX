@@ -15,17 +15,18 @@
 /* ============================================================================
  * Root Elements - Force Solid Background and Pointer Events
  * ============================================================================ */
+/* MINIMAL INTERVENTION: Only set background and pointer-events */
+/* Don't force opacity as it can interfere with React rendering */
 .is-linux html,
 .is-linux body {
   /* CRITICAL: Force clicks to be received by the window */
   pointer-events: auto !important;
   
-  /* CRITICAL: Ensure full opacity to avoid compositing issues */
-  opacity: 1 !important;
-  
   /* CRITICAL: Solid background color prevents click-through */
   background-color: #0b0f0c !important;
   background-image: none !important;
+  
+  /* DON'T force opacity - let React handle rendering */
 }
 
 /* Root element - minimal intervention */
@@ -36,7 +37,8 @@
   /* CRITICAL: Solid background color prevents click-through */
   background-color: #0b0f0c !important;
   
-  /* Don't force opacity - let React/framer-motion handle it */
+  /* DON'T force opacity - let React/framer-motion handle it */
+  /* DON'T force display or visibility */
 }
 
 /* ============================================================================

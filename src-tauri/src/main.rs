@@ -36,32 +36,25 @@ fn main() {
             if is_wayland { "Wayland" } else { "X11" });
         
         // ========================================================================
-        // WebKitGTK Environment Variables - Force Software Rendering
+        // WebKitGTK Environment Variables - Conservative Approach
         // ========================================================================
-        // Disable compositing mode (prevents black screens and rendering issues)
-        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-        
-        // Disable DMA-BUF renderer (avoids unstable GPU usage)
+        // NOTE: WEBKIT_DISABLE_COMPOSITING_MODE can cause black screens
+        // Only disable DMA-BUF renderer which is known to cause issues
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         
-        // Force software rendering (critical for stability)
-        std::env::set_var("WEBKIT_FORCE_SOFTWARE_RENDERING", "1");
-        
-        // Disable hardware acceleration (prevents DRI3/EGL errors)
-        std::env::set_var("WEBKIT_DISABLE_HARDWARE_ACCELERATION", "1");
+        // Don't disable compositing mode as it can cause black screens
+        // Don't force software rendering as it can cause black screens
+        // Only disable problematic GPU features, not all rendering
         
         // ========================================================================
-        // EGL/DRI3 Environment Variables - Avoid GPU Context Issues
+        // EGL/DRI3 Environment Variables - Conservative Approach
         // ========================================================================
-        // Force Mesa software rendering (fallback when GPU is unstable)
-        std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+        // NOTE: LIBGL_ALWAYS_SOFTWARE can cause black screens
+        // Only set Mesa version overrides if needed, don't force software rendering
+        // std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1"); // DISABLED - causes black screens
         
-        // Disable DRI3 (prevents "Could not get DRI3 device" errors)
-        std::env::set_var("MESA_GL_VERSION_OVERRIDE", "3.3");
-        std::env::set_var("MESA_GLSL_VERSION_OVERRIDE", "330");
-        
-        // Force software Mesa driver
-        std::env::set_var("GALLIUM_DRIVER", "llvmpipe");
+        // Don't force software Mesa driver as it can cause black screens
+        // Let the system use hardware acceleration if available
         
         // ========================================================================
         // GTK/WebKitGTK Specific Fixes
@@ -133,17 +126,25 @@ fn main() {
                     // ============================================================
                     // These operations ensure the window is properly initialized
                     // and can receive mouse/keyboard events
+                    // CRITICAL: Use unminimize() first to ensure window is not minimized
+                    let _ = window.unminimize();
+                    
                     if let Err(e) = window.show() {
                         eprintln!("[Linux Window Config] WARNING: Failed to show window: {}", e);
                     } else {
                         eprintln!("[Linux Window Config] ✓ Window shown");
                     }
                     
-                    if let Err(e) = window.set_focus() {
-                        eprintln!("[Linux Window Config] WARNING: Failed to set focus: {}", e);
-                    } else {
-                        eprintln!("[Linux Window Config] ✓ Window focus set");
-                    }
+                    // Small delay before setting focus to ensure window is ready
+                    let window_clone = window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        if let Err(e) = window_clone.set_focus() {
+                            eprintln!("[Linux Window Config] WARNING: Failed to set focus: {}", e);
+                        } else {
+                            eprintln!("[Linux Window Config] ✓ Window focus set");
+                        }
+                    });
                     
                     // ============================================================
                     // Set solid background color (prevents transparency artifacts)

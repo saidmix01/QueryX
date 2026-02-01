@@ -62,11 +62,12 @@ export const isLinux = async (): Promise<boolean> => {
  * This runs synchronously to prevent FOUC (Flash of Unstyled Content)
  */
 const applyLinuxCSSImmediate = (): void => {
-  // Add Linux class to root elements
+  // Add Linux class to root elements (CSS will handle the rest)
   document.body.classList.add('is-linux');
   document.documentElement.classList.add('is-linux');
   
-  // Force solid background color (prevents transparency artifacts)
+  // MINIMAL inline styles - let CSS handle most of it
+  // Only set background color to prevent black screen
   document.body.style.backgroundColor = '#0b0f0c';
   document.documentElement.style.backgroundColor = '#0b0f0c';
   
@@ -75,15 +76,15 @@ const applyLinuxCSSImmediate = (): void => {
   document.body.style.pointerEvents = 'auto';
   
   // Apply to root element if it exists
-  // NOTE: Don't force opacity: 1 to allow animations to work
+  // CRITICAL: Don't set any styles that could interfere with React rendering
   const root = document.getElementById('root');
   if (root) {
     root.style.pointerEvents = 'auto';
     root.style.backgroundColor = '#0b0f0c';
-    // Don't force opacity - allow animations/transitions to work
+    // DON'T set opacity, display, or visibility - let React handle it
   }
   
-  console.log('[Linux Fixes] Applied immediate CSS fixes');
+  console.log('[Linux Fixes] Applied immediate CSS fixes (minimal)');
 };
 
 // NOTE: removeProblematicElements function disabled to avoid interfering with rendering

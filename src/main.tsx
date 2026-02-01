@@ -2,12 +2,16 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
-import { applyLinuxFixes } from './utils/platform-fixes';
 
-// Apply Linux-specific fixes
-applyLinuxFixes().catch(console.error);
+// Ensure root element has proper background before React renders
+const root = document.getElementById('root');
+if (root) {
+  root.style.backgroundColor = '#0b0f0c';
+  root.style.minHeight = '100vh';
+}
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+// Render React app
+ReactDOM.createRoot(root!).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
