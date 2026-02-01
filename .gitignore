@@ -179,3 +179,5 @@ coverage/
 *.css.map
 *.js.map
 *.sourcemap
+*.md
+*.sh
