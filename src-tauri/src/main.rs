@@ -36,25 +36,20 @@ fn main() {
             if is_wayland { "Wayland" } else { "X11" });
         
         // ========================================================================
-        // WebKitGTK Environment Variables - Conservative Approach
+        // WebKitGTK Environment Variables - Safe Mode
         // ========================================================================
-        // NOTE: WEBKIT_DISABLE_COMPOSITING_MODE can cause black screens
-        // Only disable DMA-BUF renderer which is known to cause issues
+        // CRITICAL: Disable compositing mode to prevent black screens/rendering issues
+        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        
+        // Disable DMA-BUF renderer which is known to cause issues
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         
-        // Don't disable compositing mode as it can cause black screens
-        // Don't force software rendering as it can cause black screens
-        // Only disable problematic GPU features, not all rendering
-        
         // ========================================================================
-        // EGL/DRI3 Environment Variables - Conservative Approach
+        // EGL/DRI3 Environment Variables - Safe Mode
         // ========================================================================
-        // NOTE: LIBGL_ALWAYS_SOFTWARE can cause black screens
-        // Only set Mesa version overrides if needed, don't force software rendering
-        // std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1"); // DISABLED - causes black screens
-        
-        // Don't force software Mesa driver as it can cause black screens
-        // Let the system use hardware acceleration if available
+        // Force software rendering for EGL if hardware acceleration fails
+        // This is safer than risking a black screen with incompatible drivers
+        // std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1"); // Optional: Uncomment if still black screen
         
         // ========================================================================
         // GTK/WebKitGTK Specific Fixes
