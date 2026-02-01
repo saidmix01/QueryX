@@ -18,7 +18,6 @@ import { setupWorkspaceAutoSave } from './store/workspace-store';
 import { Database, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { invoke } from '@tauri-apps/api/tauri';
-import { applyLinuxFixes } from './utils/platform-fixes';
 
 interface LaunchFileContent {
   path: string;
@@ -38,7 +37,6 @@ function App() {
   useEffect(() => {
     loadConnections();
     setupWorkspaceAutoSave();
-    applyLinuxFixes();
   }, [loadConnections]);
 
   useEffect(() => {

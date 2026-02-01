@@ -38,8 +38,9 @@ fn main() {
         // ========================================================================
         // WebKitGTK Environment Variables - Safe Mode
         // ========================================================================
-        // CRITICAL: Disable compositing mode to prevent black screens/rendering issues
-        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        // NOTE: WEBKIT_DISABLE_COMPOSITING_MODE can cause black screens
+        // So we keep it DISABLED (commented out) unless strictly necessary
+        // std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         
         // Disable DMA-BUF renderer which is known to cause issues
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
@@ -154,6 +155,19 @@ fn main() {
                     eprintln!("[Linux Window Config] Window should now be visible and clickable");
                 } else {
                     eprintln!("[Linux Window Config] ERROR: Main window not found!");
+                }
+            }
+
+            // ====================================================================
+            // GENERAL WINDOW SHOW (Non-Linux or General Fallback)
+            // ====================================================================
+            // Since we set visible: false in tauri.conf.json, we must explicitly
+            // show the window on all platforms if it hasn't been shown yet.
+            #[cfg(not(target_os = "linux"))]
+            {
+                if let Some(window) = app.handle().get_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
                 }
             }
 

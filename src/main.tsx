@@ -2,6 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { applyLinuxFixes } from './utils/platform-fixes';
+
+// Apply platform fixes immediately
+applyLinuxFixes();
 
 // Ensure root element has proper background before React renders
 const root = document.getElementById('root');
