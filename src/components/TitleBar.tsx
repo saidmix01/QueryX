@@ -4,10 +4,12 @@ import { os } from '@tauri-apps/api';
 import { Minus, Square, X, Maximize2, Info } from 'lucide-react';
 import { useUIStore } from '../store/ui-store';
 import { useConnectionStore } from '../store/connection-store';
+import { isLinux } from '../utils/platform-fixes';
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(true);
   const [platform, setPlatform] = useState<string>('');
+  const [isLinuxPlatform, setIsLinuxPlatform] = useState(false);
   const setAboutModalOpen = useUIStore((s) => s.setAboutModalOpen);
   const { activeConnectionId, connections } = useConnectionStore();
   const activeConnection = connections.find((c) => c.id === activeConnectionId);
@@ -15,6 +17,9 @@ export function TitleBar() {
   useEffect(() => {
     // Detectar plataforma
     os.platform().then(setPlatform).catch(() => setPlatform('unknown'));
+    
+    // Detectar si es Linux (para ocultar TitleBar personalizado)
+    isLinux().then(setIsLinuxPlatform).catch(() => setIsLinuxPlatform(false));
 
     // Escuchar cambios en el estado de maximizado
     const unlisten = appWindow.onResized(async () => {
@@ -43,6 +48,11 @@ export function TitleBar() {
   const handleClose = () => appWindow.close();
 
   const isMacOS = platform === 'darwin';
+
+  // En Linux, no mostrar TitleBar personalizado (usar barra del sistema)
+  if (isLinuxPlatform) {
+    return null;
+  }
 
   // Componente de botones de ventana
   const WindowControls = () => (

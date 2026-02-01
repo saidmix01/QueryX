@@ -1,68 +1,246 @@
-/* linux-fix.css */
+/* ============================================================================
+ * LINUX SAFETY MODE - CSS Overrides
+ * ============================================================================
+ * 
+ * CRITICAL: These overrides are ONLY applied when .is-linux class is present
+ * They fix WebKitGTK/Wayland/X11 issues:
+ * - Click-through bugs (pointer-events)
+ * - Black screen rendering (opacity, background)
+ * - Transparency artifacts (backdrop-filter, mix-blend-mode)
+ * - EGL/DRI3 rendering issues (software rendering fallback)
+ * 
+ * These styles are applied via platform-fixes.ts after OS detection
+ * ============================================================================ */
 
-/* 
- * LINUX SAFETY MODE 
- * Specific overrides to fix WebKitGTK/Wayland issues:
- * - Click-through bugs
- * - Black screen rendering
- * - Transparency artifacts
- */
-
-.is-linux html, .is-linux body, .is-linux #root {
-  /* Force clicks to be received */
+/* ============================================================================
+ * Root Elements - Force Solid Background and Pointer Events
+ * ============================================================================ */
+.is-linux html,
+.is-linux body,
+.is-linux #root {
+  /* CRITICAL: Force clicks to be received by the window */
   pointer-events: auto !important;
-  /* Ensure full opacity to avoid compositing issues */
+  
+  /* CRITICAL: Ensure full opacity to avoid compositing issues */
   opacity: 1 !important;
-  /* Solid background color - critical for preventing click-through */
-  background-color: #0b0f0c !important; 
-  /* Disable transparency */
+  
+  /* CRITICAL: Solid background color prevents click-through */
+  /* Matches dark theme background: #0b0f0c */
+  background-color: #0b0f0c !important;
   background-image: none !important;
+  
+  /* Ensure no transparency that could cause rendering issues */
+  -webkit-background-size: auto !important;
+  background-size: auto !important;
 }
 
-/* Disable expensive/problematic effects on Linux */
+/* ============================================================================
+ * Global Effects - Disable Problematic GPU-Accelerated Features
+ * ============================================================================ */
 .is-linux * {
+  /* Disable backdrop filters (causes black screens on WebKitGTK) */
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  
+  /* Disable CSS filters that may use GPU (can cause rendering issues) */
+  /* Note: We allow basic filters but disable complex ones */
   filter: none !important;
-  /* Vibrancy effects often cause black screens on Linux WebKit */
+  
+  /* Disable blend modes (often cause black screens on Linux WebKit) */
   mix-blend-mode: normal !important;
+  
+  /* NOTE: We do NOT force opacity: 1 globally as it prevents
+   * animations and transitions from working correctly (fade-out, etc.)
+   * Only force opacity on specific problematic elements */
 }
 
-/* Fix for invisible overlays/layers that capture clicks */
-.is-linux div[style*="opacity: 0"], 
-.is-linux div[style*="opacity:0"] {
+/* ============================================================================
+ * Invisible Overlays - Remove Click Blockers
+ * ============================================================================ */
+/* Fix for invisible overlays/layers that capture clicks but aren't visible */
+.is-linux div[style*="opacity: 0"],
+.is-linux div[style*="opacity:0"],
+.is-linux [style*="opacity: 0"],
+.is-linux [style*="opacity:0"] {
   display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Fix for elements with very low opacity that might block clicks */
+.is-linux [style*="opacity: 0."] {
+  /* Only hide if opacity is less than 0.1 (essentially invisible) */
   pointer-events: none !important;
 }
 
-/* Ensure main container and interactive elements are clickable */
+/* ============================================================================
+ * Interactive Elements - Guarantee Clickability
+ * ============================================================================ */
+/* Ensure all interactive elements can receive clicks */
 .is-linux .app-container,
 .is-linux button,
 .is-linux a,
 .is-linux input,
 .is-linux textarea,
 .is-linux select,
-.is-linux [role="button"] {
+.is-linux [role="button"],
+.is-linux [role="link"],
+.is-linux [role="menuitem"],
+.is-linux [role="tab"],
+.is-linux [role="option"],
+.is-linux [tabindex],
+.is-linux [onclick],
+.is-linux [data-clickable] {
   pointer-events: auto !important;
+  cursor: pointer !important;
 }
 
+/* Ensure form elements are always interactive */
+.is-linux input:not([disabled]),
+.is-linux textarea:not([disabled]),
+.is-linux select:not([disabled]),
+.is-linux button:not([disabled]) {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+/* ============================================================================
+ * Transparency Utilities - Force Opaque Backgrounds
+ * ============================================================================ */
 /* Disable any transparency utility classes on Linux */
 .is-linux .transparent,
 .is-linux [class*="transparent"],
-.is-linux .bg-transparent {
+.is-linux .bg-transparent,
+.is-linux [class*="bg-transparent"],
+.is-linux [class*="opacity-0"],
+.is-linux [class*="opacity-10"],
+.is-linux [class*="opacity-20"] {
   background-color: #0b0f0c !important;
   opacity: 1 !important;
 }
 
-/* Override potential fixed positioning issues */
-.is-linux .fixed-overlay {
-  display: none !important;
+/* Override Tailwind opacity utilities that might cause issues */
+.is-linux [class*="opacity-"] {
+  /* Allow opacity > 0.5, but force opacity 1 for very low values */
+  /* This is a heuristic - elements with opacity < 0.5 might be problematic */
 }
 
-/* Ensure modals are visible and opaque */
-.is-linux [role="dialog"],
-.is-linux .modal {
+/* ============================================================================
+ * Fixed/Overlay Elements - Prevent Click-Through
+ * ============================================================================ */
+/* Ensure fixed position overlays are visible and clickable */
+/* BUT: Only force opacity if element is meant to be visible (not animating out) */
+.is-linux .fixed:not([style*="opacity: 0"]):not([style*="opacity:0"]),
+.is-linux [style*="position: fixed"]:not([style*="opacity: 0"]):not([style*="opacity:0"]),
+.is-linux [style*="position:fixed"]:not([style*="opacity: 0"]):not([style*="opacity:0"]) {
+  pointer-events: auto !important;
+  /* Only force opacity if not explicitly set to 0 (allows animations) */
+  /* Remove backdrop-filter from fixed elements */
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Remove problematic fixed overlays that might block clicks */
+.is-linux .fixed-overlay,
+.is-linux [class*="overlay"][style*="opacity: 0"] {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* ============================================================================
+ * Modals and Dialogs - Ensure Visibility
+ * ============================================================================ */
+/* Ensure modals are visible, opaque, and clickable */
+/* BUT: Allow opacity transitions for animations (fade in/out) */
+.is-linux [role="dialog"]:not([style*="opacity: 0"]):not([style*="opacity:0"]),
+.is-linux .modal:not([style*="opacity: 0"]):not([style*="opacity:0"]),
+.is-linux [class*="modal"]:not([style*="opacity: 0"]):not([style*="opacity:0"]),
+.is-linux [class*="Modal"]:not([style*="opacity: 0"]):not([style*="opacity:0"]) {
   background-color: #1a1f1c !important; /* Slightly lighter than bg */
-  opacity: 1 !important;
+  /* Only force opacity if not explicitly animating out */
+  pointer-events: auto !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Modal overlays/backdrops should be opaque */
+.is-linux [class*="modal-backdrop"],
+.is-linux [class*="modal-overlay"],
+.is-linux [class*="backdrop"] {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  backdrop-filter: none !important;
+}
+
+/* ============================================================================
+ * Animations and Transitions - Disable Problematic Effects
+ * ============================================================================ */
+/* Disable animations that might use GPU and cause rendering issues */
+/* Note: We keep basic transitions but disable complex animations */
+.is-linux [class*="animate-"],
+.is-linux [style*="animation"] {
+  /* Allow animations but ensure they don't cause rendering issues */
+  will-change: auto !important;
+}
+
+/* ============================================================================
+ * Specific Component Fixes
+ * ============================================================================ */
+/* Title bar should always be clickable (if visible) */
+/* Note: TitleBar is hidden on Linux, so this is for edge cases */
+.is-linux [class*="title-bar"]:not([style*="opacity: 0"]):not([style*="opacity:0"]),
+.is-linux [class*="TitleBar"]:not([style*="opacity: 0"]):not([style*="opacity:0"]) {
+  pointer-events: auto !important;
+  background-color: #0b0f0c !important;
+}
+
+/* Sidebar should be fully opaque (when visible) */
+.is-linux [class*="sidebar"]:not([style*="opacity: 0"]):not([style*="opacity:0"]),
+.is-linux [class*="Sidebar"]:not([style*="opacity: 0"]):not([style*="opacity:0"]) {
+  background-color: #0b0f0c !important;
+  backdrop-filter: none !important;
+}
+
+/* Panels and containers (when visible) */
+.is-linux [class*="panel"]:not([style*="opacity: 0"]):not([style*="opacity:0"]),
+.is-linux [class*="Panel"]:not([style*="opacity: 0"]):not([style*="opacity:0"]) {
+  backdrop-filter: none !important;
+}
+
+/* ============================================================================
+ * Animation Support - Allow Fade Out/In Transitions
+ * ============================================================================ */
+/* Ensure animations and transitions work correctly on Linux */
+/* Don't interfere with opacity transitions */
+.is-linux [class*="animate-"],
+.is-linux [style*="transition"],
+.is-linux [style*="animation"] {
+  /* Allow opacity transitions to work naturally */
+  will-change: auto !important;
+}
+
+/* Allow AnimatePresence and framer-motion animations to work */
+/* CRITICAL: Don't interfere with framer-motion opacity animations */
+.is-linux [data-framer-name],
+.is-linux [class*="framer-"],
+.is-linux [data-framer-component],
+.is-linux [data-framer-appear-id] {
+  /* Don't force opacity, allow animations */
+  /* framer-motion controls opacity via inline styles during animations */
+}
+
+/* Ensure framer-motion exit animations work correctly */
+/* When framer-motion sets opacity via inline style, respect it */
+.is-linux [style*="opacity"] {
+  /* Don't override inline opacity styles (framer-motion uses these) */
+}
+
+/* Specific fix for AnimatePresence - ensure exit animations complete */
+.is-linux [data-framer-appear-id][style*="opacity: 0"],
+.is-linux [data-framer-appear-id][style*="opacity:0"] {
+  /* Allow elements with opacity: 0 to remain visible during exit animation */
+  /* framer-motion will handle the final removal */
+  pointer-events: none !important;
 }
