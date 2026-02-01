@@ -16,13 +16,11 @@ const navItems: { id: SidebarView; icon: typeof Database; label: string }[] = [
 ];
 
 function SidebarItem({
-  id,
   icon: Icon,
   label,
   isActive,
   onClick,
 }: {
-  id: string;
   icon: typeof Database;
   label: string;
   isActive: boolean;
@@ -111,7 +109,6 @@ export function Sidebar() {
         {navItems.map(({ id, icon, label }) => (
           <SidebarItem
             key={id}
-            id={id}
             icon={icon}
             label={label}
             isActive={sidebarView === id}

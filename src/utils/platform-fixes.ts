@@ -86,23 +86,38 @@ const applyLinuxCSSImmediate = (): void => {
   console.log('[Linux Fixes] Applied immediate CSS fixes');
 };
 
-/**
- * Remove problematic elements that might block clicks or cause rendering issues
- * Runs immediately and periodically to catch dynamically added elements
- */
+// NOTE: removeProblematicElements function disabled to avoid interfering with rendering
+// The CSS overrides should be sufficient for fixing Linux issues
+/*
 const removeProblematicElements = (): void => {
-  // 1. Remove invisible fixed overlays (common click blockers)
+  // CRITICAL: Don't use display: none as it breaks rendering
+  // Only disable pointer-events for truly invisible elements that aren't animating
+  
+  // 1. Disable pointer-events on invisible fixed overlays (common click blockers)
+  // BUT: Exclude framer-motion elements and elements with animations
   const invisibleFixed = document.querySelectorAll(
-    'div[style*="position: fixed"][style*="opacity: 0"], ' +
-    'div[style*="position:fixed"][style*="opacity:0"]'
+    'div[style*="position: fixed"][style*="opacity: 0"]:not([data-framer-name]):not([data-framer-component]):not([data-framer-appear-id]):not([class*="animate-"]):not([class*="framer-"]), ' +
+    'div[style*="position:fixed"][style*="opacity:0"]:not([data-framer-name]):not([data-framer-component]):not([data-framer-appear-id]):not([class*="animate-"]):not([class*="framer-"])'
   );
   invisibleFixed.forEach(el => {
     const htmlEl = el as HTMLElement;
-    htmlEl.style.display = 'none';
-    htmlEl.style.pointerEvents = 'none';
+    // Double check - never hide elements that might be animating
+    const hasAnimation = htmlEl.classList.contains('animate-') ||
+                        htmlEl.classList.contains('framer-') ||
+                        htmlEl.getAttribute('data-framer-name') !== null ||
+                        htmlEl.getAttribute('data-framer-component') !== null ||
+                        htmlEl.getAttribute('data-framer-appear-id') !== null ||
+                        htmlEl.style.transition !== '' ||
+                        htmlEl.style.animation !== '';
+    
+    if (!hasAnimation) {
+      // Only disable pointer events, NEVER use display: none
+      htmlEl.style.pointerEvents = 'none';
+    }
   });
 
   // 2. Scan for fixed elements with problematic opacity/visibility
+  // But be very conservative - only disable pointer-events
   const allDivs = document.querySelectorAll('div');
   allDivs.forEach(el => {
     const style = window.getComputedStyle(el);
@@ -118,18 +133,18 @@ const removeProblematicElements = (): void => {
       style.opacity === '0' &&
       parseInt(style.zIndex) > 50
     ) {
-      // Only hide if opacity is exactly 0 AND not part of an animation
+      // Only disable pointer events if opacity is exactly 0 AND not part of an animation
       // Check if element has transition/animation classes
       const hasAnimation = htmlEl.classList.contains('animate-') ||
                           htmlEl.classList.contains('framer-') ||
-                          htmlEl.getAttribute('data-framer-name') !== null;
+                          htmlEl.getAttribute('data-framer-name') !== null ||
+                          htmlEl.getAttribute('data-framer-component') !== null ||
+                          htmlEl.getAttribute('data-framer-appear-id') !== null ||
+                          htmlEl.style.transition !== '' ||
+                          htmlEl.style.animation !== '';
       
       if (!hasAnimation) {
-        // Only hide if it's not animating (allows fade-out animations to complete)
-        htmlEl.style.display = 'none';
-        htmlEl.style.pointerEvents = 'none';
-      } else {
-        // If animating, just disable pointer events but allow animation
+        // Only disable pointer events, NEVER use display: none
         htmlEl.style.pointerEvents = 'none';
       }
     }
@@ -194,48 +209,11 @@ export const applyLinuxFixes = async (): Promise<void> => {
     }
     
     // ====================================================================
-    // STEP 3: Runtime Monitoring
+    // STEP 3: Runtime Monitoring - DISABLED FOR NOW
     // ====================================================================
-    // Remove problematic elements immediately
-    removeProblematicElements();
-    
-    // Set up periodic monitoring for dynamically added elements
-    // Check every 2 seconds for new problematic elements
-    const monitoringInterval = setInterval(() => {
-      removeProblematicElements();
-    }, 2000);
-    
-    // Clean up interval when page unloads
-    window.addEventListener('beforeunload', () => {
-      clearInterval(monitoringInterval);
-    });
-    
-    // ====================================================================
-    // STEP 4: MutationObserver for Real-time Monitoring
-    // ====================================================================
-    // Watch for DOM changes and apply fixes to new elements
-    const observer = new MutationObserver((mutations) => {
-      let shouldCheck = false;
-      
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-          shouldCheck = true;
-        }
-      });
-      
-      if (shouldCheck) {
-        // Debounce checks to avoid performance issues
-        setTimeout(removeProblematicElements, 100);
-      }
-    });
-    
-    // Start observing the entire document
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['style', 'class'],
-    });
+    // NOTE: Disabled to avoid interfering with initial render
+    // The CSS overrides should be sufficient for most cases
+    // If needed, can be re-enabled later with more conservative checks
     
     console.log('[Linux Fixes] ✓ All fixes applied and monitoring active');
     console.log('[Linux Fixes] Window should now be visible, clickable, and stable');
