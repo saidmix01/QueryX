@@ -81,28 +81,26 @@ async function generateIcons() {
       console.log(`✅ Generado: icon-${size}x${size}.png`);
     }
 
-    // También copiar el icono original como icon.png (si no existe o es diferente)
+    // También copiar el icono original como icon.png
     const mainIconPath = join(outputDir, 'icon.png');
     
-    // Si el icono original no existe o tiene un tamaño diferente, actualizarlo
-    if (!existsSync(mainIconPath) || sourceMetadata.width !== 256) {
-      // Asegurar que el icono principal sea 256x256
-      const mainResizeOptions = useBackground
-        ? {
-            fit: 'contain',
-            background: backgroundColor
-          }
-        : {
-            fit: 'cover',
-            position: 'center'
-          };
-      
-      await sharp(sourceBuffer)
-        .resize(256, 256, mainResizeOptions)
-        .png()
-        .toFile(mainIconPath);
-      console.log(`✅ Actualizado: icon.png (256x256)`);
-    }
+    // Siempre actualizar icon.png para asegurar que coincida con public/icon.png
+    // Usar el tamaño 256x256 que es estándar para este archivo en Tauri
+    const mainResizeOptions = useBackground
+      ? {
+          fit: 'contain',
+          background: backgroundColor
+        }
+      : {
+          fit: 'cover',
+          position: 'center'
+        };
+    
+    await sharp(sourceBuffer)
+      .resize(256, 256, mainResizeOptions)
+      .png()
+      .toFile(mainIconPath);
+    console.log(`✅ Actualizado: icon.png (256x256)`);
 
     console.log(`\n✨ Iconos generados exitosamente en ${outputDir}`);
     console.log(`\n📋 Iconos generados:`);
