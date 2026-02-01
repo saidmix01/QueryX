@@ -44,6 +44,26 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
   },
 
   createConnection: async (dto) => {
+    // Sanitización defensiva en el store
+    if (!dto || typeof dto !== 'object') {
+      throw new Error('Invalid connection data: payload must be an object');
+    }
+    
+    // Verificar si es un evento o tiene referencias circulares
+    try {
+      // Esto fallará rápido si hay referencias circulares antes de llegar a Tauri
+      JSON.stringify(dto); 
+    } catch (e) {
+      console.error('Circular reference detected in createConnection payload:', dto);
+      throw new Error('Invalid connection data: circular reference detected');
+    }
+
+    // Asegurar que no sea un evento de React/DOM
+    if ('preventDefault' in dto || 'stopPropagation' in dto || 'nativeEvent' in dto) {
+      console.error('Event object passed to createConnection instead of DTO:', dto);
+      throw new Error('Invalid connection data: received Event object');
+    }
+
     const connection = await connectionApi.create(dto);
     set((state) => ({
       connections: [...state.connections, connection],
@@ -52,6 +72,7 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
   },
 
   updateConnection: async (id, dto) => {
+    if (!id || typeof id !== 'string') throw new Error('Invalid ID for update');
     const updated = await connectionApi.update(id, dto);
     set((state) => ({
       connections: state.connections.map((c) =>
@@ -70,6 +91,11 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
   },
 
   testConnection: async (id) => {
+    // Validación estricta para asegurar que sea un UUID string y no un evento
+    if (typeof id !== 'string') {
+      console.error('Invalid ID passed to testConnection:', id);
+      throw new Error(`Invalid connection ID: expected string, got ${typeof id}`);
+    }
     await connectionApi.test(id);
   },
 

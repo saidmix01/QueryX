@@ -1,6 +1,10 @@
 {
   "name": "queryx",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/saidmix01/QueryX"
+  },
   "version": "1.0.0",
   "type": "module",
   "scripts": {

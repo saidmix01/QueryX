@@ -43,6 +43,43 @@ export function ConnectionModal() {
 
   const isSQLite = form.engine === 'sqlite';
 
+  const getPayload = (): CreateConnectionDto => {
+    // Sanitización explícita campo por campo para asegurar tipos primitivos
+    const safeName = String(form.name || '');
+    const safeEngine = (['postgresql', 'mysql', 'sqlite', 'sqlserver'].includes(form.engine) ? form.engine : 'postgresql') as DatabaseEngine;
+    const safeHost = String(form.host || 'localhost');
+    const safePort = Number(form.port) || defaultPorts[safeEngine];
+    const safeDatabase = form.database ? String(form.database) : undefined;
+    const safeUsername = form.username ? String(form.username) : undefined;
+    const safePassword = form.password ? String(form.password) : undefined;
+    const safeFilePath = form.file_path ? String(form.file_path) : undefined;
+
+    const rawPayload = {
+      name: safeName,
+      engine: safeEngine,
+      database: isSQLite ? safeFilePath : safeDatabase,
+      host: isSQLite ? undefined : safeHost,
+      port: isSQLite ? undefined : safePort,
+      username: isSQLite ? undefined : safeUsername,
+      password: isSQLite ? undefined : safePassword,
+      file_path: isSQLite ? safeFilePath : undefined,
+    };
+    
+    // Doble seguridad: clonación profunda para romper cualquier referencia oculta
+    try {
+      return JSON.parse(JSON.stringify(rawPayload));
+    } catch (e) {
+      console.error('Error sanitizing payload:', e);
+      // Fallback a un objeto seguro mínimo si falla la clonación
+      return {
+        name: safeName,
+        engine: safeEngine,
+        host: 'localhost',
+        port: 5432
+      };
+    }
+  };
+
   useEffect(() => {
     if (editingConnection) {
       setForm({
@@ -68,20 +105,12 @@ export function ConnectionModal() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setError(null);
     setIsSaving(true);
 
     try {
-      const payload: CreateConnectionDto = {
-        name: form.name,
-        engine: form.engine,
-        database: isSQLite ? form.file_path : (form.database || undefined),
-        host: isSQLite ? undefined : (form.host || 'localhost'),
-        port: isSQLite ? undefined : (form.port && form.port > 0 ? form.port : defaultPorts[form.engine]),
-        username: isSQLite ? undefined : form.username,
-        password: isSQLite ? undefined : form.password,
-        file_path: isSQLite ? form.file_path : undefined,
-      };
+      const payload = getPayload();
 
       console.log('Creating connection with payload:', payload);
 
@@ -105,14 +134,25 @@ export function ConnectionModal() {
     }
   };
 
-  const handleTest = async () => {
+  const handleTest = async (e?: React.MouseEvent | any) => {
+    console.log('--- HANDLE TEST START (SANITIZED V3) ---');
+    // Prevenir uso accidental del evento
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
+
     setError(null);
     setIsTesting(true);
 
     try {
       // Para test, primero creamos temporalmente si es nueva
       if (!editingConnectionId) {
-        const conn = await createConnection(form);
+        const payload = getPayload();
+        console.log('Payload for test:', payload);
+        
+        // Verificar payload antes de enviar
+        if (!payload || typeof payload !== 'object') throw new Error('Invalid payload');
+        
+        const conn = await createConnection(payload);
         await testConnection(conn.id);
         alert('Connection successful!');
       } else {
@@ -120,6 +160,7 @@ export function ConnectionModal() {
         alert('Connection successful!');
       }
     } catch (e) {
+      console.error('Connection test error:', e);
       setError(String(e));
     } finally {
       setIsTesting(false);

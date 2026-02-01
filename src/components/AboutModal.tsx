@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Database, Code, Globe } from 'lucide-react';
+import { X, Database, Code, Globe, Github } from 'lucide-react';
 import { useUIStore } from '../store/ui-store';
 
 export function AboutModal() {
@@ -113,6 +113,17 @@ export function AboutModal() {
 
             {/* Footer */}
             <div className="pt-4 border-t border-dark-border/30">
+              <div className="flex justify-center mb-3">
+                <a
+                  href="https://github.com/saidmix01/QueryX"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-dark-bg hover:bg-dark-hover border border-dark-border rounded-full transition-colors text-xs text-dark-text hover:text-matrix-400 group"
+                >
+                  <Github className="w-3.5 h-3.5 text-dark-muted group-hover:text-matrix-400 transition-colors" />
+                  <span>Ver en GitHub</span>
+                </a>
+              </div>
               <p className="text-xs text-center text-dark-muted">
                 © 2024-2026 QueryX. Todos los derechos reservados.
               </p>

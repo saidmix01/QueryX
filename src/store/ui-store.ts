@@ -66,7 +66,7 @@ export const useUIStore = create<UIState>()(
       openConnectionModal: (connectionId) =>
         set({
           isConnectionModalOpen: true,
-          editingConnectionId: connectionId ?? null,
+          editingConnectionId: typeof connectionId === 'string' ? connectionId : null,
         }),
 
       closeConnectionModal: () =>
