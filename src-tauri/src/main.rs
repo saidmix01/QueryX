@@ -49,7 +49,10 @@ fn main() {
         // ========================================================================
         // Force software rendering for EGL if hardware acceleration fails
         // This is safer than risking a black screen with incompatible drivers
-        // std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1"); // Optional: Uncomment if still black screen
+        std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+        
+        // Also force WebKit to use software rendering if possible
+        std::env::set_var("WEBKIT_FORCE_SANDBOX", "0");
         
         // ========================================================================
         // GTK/WebKitGTK Specific Fixes
@@ -58,9 +61,8 @@ fn main() {
         std::env::set_var("GTK_CSD", "0");
         
         // Force GTK to use X11 backend explicitly (more stable than auto-detection)
-        if !is_wayland {
-            std::env::set_var("GDK_BACKEND", "x11");
-        }
+        // Even on Wayland, we prefer XWayland for stability with Tauri v1
+        std::env::set_var("GDK_BACKEND", "x11");
         
         // Disable GTK overlay scrolling (can cause rendering artifacts)
         std::env::set_var("GTK_OVERLAY_SCROLLING", "0");
