@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="SqlFileAssociation" Guid="8868A811-3708-4127-9520-20512803C519">
+        <RegistryValue Root="HKCU" Key="Software\QueryX\SqlAssociation" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+        <ProgId Id="QueryX.SQL" Description="SQL Query File" Icon="Path" IconIndex="0">
+          <Extension Id="sql" ContentType="application/sql">
+            <Verb Id="open" Command="Open" TargetFile="Path" Argument="&quot;%1&quot;" />
+          </Extension>
+        </ProgId>
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

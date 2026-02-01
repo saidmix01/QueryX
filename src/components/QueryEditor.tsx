@@ -50,9 +50,9 @@ export function QueryEditor({ tab }: QueryEditorProps) {
     [tab.id, updateQuery]
   );
 
-  const handleEditorMount = useCallback((editor: any) => {
-    editorRef.current = editor;
-  }, []);
+  // Refs para los handlers de ejecución
+  const executeCurrentRef = useRef<() => void>(() => {});
+  const executeAllRef = useRef<() => void>(() => {});
 
   const handleExecuteCurrent = useCallback(() => {
     if (!editorRef.current) {
@@ -83,6 +83,46 @@ export function QueryEditor({ tab }: QueryEditorProps) {
       executeQuery(tab.id);
     }
   }, [tab.id, statements.length, executeMultiStatement, executeQuery]);
+
+  useEffect(() => {
+    executeCurrentRef.current = handleExecuteCurrent;
+    executeAllRef.current = handleExecuteAll;
+  }, [handleExecuteCurrent, handleExecuteAll]);
+
+  const handleEditorMount = useCallback((editor: any, monaco: any) => {
+    editorRef.current = editor;
+
+    // Definir tema personalizado estilo Matrix/QueryX
+    monaco.editor.defineTheme('queryx-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'keyword', foreground: '00e676', fontStyle: 'bold' },
+        { token: 'operator', foreground: '00e676' },
+        { token: 'string', foreground: 'a5d6ff' },
+        { token: 'comment', foreground: '6272a4', fontStyle: 'italic' },
+        { token: 'number', foreground: 'bd93f9' },
+        { token: 'delimiter', foreground: 'f8f8f2' },
+      ],
+      colors: {
+        'editor.background': '#00000000', // Transparente para usar el fondo de la app
+        'editor.lineHighlightBackground': '#00e67610',
+        'editorCursor.foreground': '#00e676',
+        'editor.selectionBackground': '#00e67630',
+      }
+    });
+    
+    monaco.editor.setTheme('queryx-dark');
+
+    // Registrar comandos
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+       executeCurrentRef.current();
+    });
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
+       executeAllRef.current();
+    });
+  }, []);
 
   const handleCancel = useCallback(() => {
     cancelQuery(tab.id);
@@ -247,7 +287,7 @@ export function QueryEditor({ tab }: QueryEditorProps) {
           value={tab.query}
           onChange={handleEditorChange}
           onMount={handleEditorMount}
-          theme="vs-dark"
+          theme="queryx-dark"
           options={{
             minimap: { enabled: false },
             fontSize: 14,

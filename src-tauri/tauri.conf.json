@@ -45,7 +45,11 @@
       "externalBin": [],
       "icon": [
         "icons/icon.ico",
-        "icons/icon.png"
+        "icons/icon.png",
+        "icons/icon-32x32.png",
+        "icons/icon-128x128.png",
+        "icons/icon-256x256.png",
+        "icons/icon-512x512.png"
       ],
       "identifier": "com.queryx.app",
       "longDescription": "QueryX - Professional SQL Database Manager with multi-engine support for PostgreSQL, MySQL, and SQLite",
@@ -63,7 +67,12 @@
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
-        "timestampUrl": ""
+        "timestampUrl": "",
+        "wix": {
+          "template": "wix/main.wxs",
+          "fragmentPaths": ["wix/registry.wxs"],
+          "componentRefs": []
+        }
       }
     },
     "security": {
@@ -81,8 +90,14 @@
         "width": 1200,
         "minWidth": 900,
         "minHeight": 600,
-        "decorations": false,
-        "maximized": true
+        "decorations": true,
+        "maximized": true,
+        "transparent": false,
+        "skipTaskbar": false,
+        "visible": true,
+        "alwaysOnTop": false,
+        "focus": true,
+        "center": false
       }
     ]
   }

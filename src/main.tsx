@@ -3,7 +3,15 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+// Ensure root element has proper background before React renders
+const root = document.getElementById('root');
+if (root) {
+  root.style.backgroundColor = '#0b0f0c';
+  root.style.minHeight = '100vh';
+}
+
+// Render React app
+ReactDOM.createRoot(root!).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>

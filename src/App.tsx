@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Sidebar } from './components/Sidebar';
 import { MainContent } from './components/MainContent';
@@ -13,16 +12,24 @@ import { ResultPanelsManager } from './components/ResultPanelsManager';
 import { useConnectionStore } from './store/connection-store';
 import { useUIStore } from './store/ui-store';
 import { useWorkspaceStore } from './store/workspace-store';
+import { useQueryStore } from './store/query-store';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { setupWorkspaceAutoSave } from './store/workspace-store';
 import { Database, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { invoke } from '@tauri-apps/api/tauri';
+
+interface LaunchFileContent {
+  path: string;
+  content: string;
+}
 
 function App() {
   const loadConnections = useConnectionStore((s) => s.loadConnections);
   const isConnectionModalOpen = useUIStore((s) => s.isConnectionModalOpen);
   const { activeConnectionId } = useConnectionStore();
   const { restoreWorkspace } = useWorkspaceStore();
+  const { addTab } = useQueryStore();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useGlobalShortcuts();
@@ -38,6 +45,30 @@ function App() {
     }
   }, [activeConnectionId, restoreWorkspace]);
 
+  // Check for launch file
+  useEffect(() => {
+    async function checkLaunchFile() {
+      try {
+        const fileData = await invoke<LaunchFileContent | null>('get_launch_file');
+        if (fileData) {
+          const { path, content } = fileData;
+          // Extract filename for title
+          const fileName = path.split(/[\\/]/).pop() || 'Untitled.sql';
+          
+          addTab({
+            title: fileName,
+            query: content,
+            connectionId: useConnectionStore.getState().activeConnectionId || '',
+          });
+        }
+      } catch (error) {
+        console.error('Failed to open launch file:', error);
+      }
+    }
+    
+    checkLaunchFile();
+  }, [addTab]); // Run once on mount (addTab is stable)
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-dark-bg">
       {/* Barra de título personalizada */}
@@ -47,21 +78,13 @@ function App() {
       <div className="flex-1 flex overflow-hidden">
         <PanelGroup direction="horizontal">
           {/* Sidebar con colapso */}
-          <AnimatePresence mode="wait">
-            {!sidebarCollapsed && (
-              <Panel defaultSize={16} minSize={12} maxSize={25}>
-                <motion.div
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: -20, opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="h-full"
-                >
-                  <Sidebar />
-                </motion.div>
-              </Panel>
-            )}
-          </AnimatePresence>
+          {!sidebarCollapsed && (
+            <Panel defaultSize={16} minSize={12} maxSize={25}>
+              <div className="h-full">
+                <Sidebar />
+              </div>
+            </Panel>
+          )}
 
           {/* Resize Handle con botón de colapso */}
           {!sidebarCollapsed && (
@@ -78,10 +101,7 @@ function App() {
 
           {/* Botón para expandir sidebar colapsado */}
           {sidebarCollapsed && (
-            <motion.button
-              initial={{ x: -10, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ duration: 0.15 }}
+            <button
               onClick={() => setSidebarCollapsed(false)}
               className="w-7 bg-dark-surface/80 border-r border-dark-border/50 flex flex-col items-center py-3 gap-2 hover:bg-dark-hover hover:w-8 transition-all group"
               title="Expand sidebar (Ctrl+B)"
@@ -89,7 +109,7 @@ function App() {
               <ChevronRight className="w-3.5 h-3.5 text-matrix-400 group-hover:text-matrix-300" />
               <div className="h-px w-3 bg-dark-border/50" />
               <Database className="w-3.5 h-3.5 text-dark-muted group-hover:text-matrix-400" />
-            </motion.button>
+            </button>
           )}
 
           {/* Main Content Area */}

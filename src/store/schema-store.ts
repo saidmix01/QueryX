@@ -112,6 +112,15 @@ export const useSchemaStore = create<SchemaState>((set, get) => ({
     }));
     try {
       const tables = await schemaApi.listTables(connectionId, schema);
+      
+      // Update catalog
+      tables.forEach(t => {
+        if (!t.schema && schema) {
+          t.schema = schema;
+        }
+        schemaCatalog.updateTable(t);
+      });
+
       set((prev) => {
         const prevConn = prev.byConnection[connectionId] || {
           databases: [],

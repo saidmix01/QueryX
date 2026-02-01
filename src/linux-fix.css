@@ -1,0 +1,95 @@
+/* ============================================================================
+ * LINUX SAFETY MODE - CSS Overrides (CONSERVATIVE VERSION)
+ * ============================================================================
+ * 
+ * CRITICAL: These overrides are ONLY applied when .is-linux class is present
+ * They fix WebKitGTK/Wayland/X11 issues:
+ * - Click-through bugs (pointer-events)
+ * - Black screen rendering (opacity, background)
+ * - Transparency artifacts (backdrop-filter, mix-blend-mode)
+ * - EGL/DRI3 rendering issues (software rendering fallback)
+ * 
+ * These styles are applied via platform-fixes.ts after OS detection
+ * ============================================================================ */
+
+/* ============================================================================
+ * Root Elements - Force Solid Background and Pointer Events
+ * ============================================================================ */
+/* MINIMAL INTERVENTION: Only set background and pointer-events */
+/* Don't force opacity as it can interfere with React rendering */
+.is-linux html,
+.is-linux body {
+  /* CRITICAL: Force clicks to be received by the window */
+  pointer-events: auto !important;
+  
+  /* CRITICAL: Solid background color prevents click-through */
+  background-color: #0b0f0c !important;
+  background-image: none !important;
+  
+  /* DON'T force opacity - let React handle rendering */
+}
+
+/* Root element - minimal intervention */
+.is-linux #root {
+  /* CRITICAL: Force clicks to be received by the window */
+  pointer-events: auto !important;
+  
+  /* CRITICAL: Solid background color prevents click-through */
+  background-color: #0b0f0c !important;
+  
+  /* DON'T force opacity - let React/framer-motion handle it */
+  /* DON'T force display or visibility */
+}
+
+/* ============================================================================
+ * Backdrop Filters - Disable on specific elements only
+ * ============================================================================ */
+/* Only disable backdrop filters on elements that explicitly use them */
+.is-linux [style*="backdrop-filter"]:not([style*="backdrop-filter: none"]),
+.is-linux [style*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Disable backdrop-filter utility classes */
+.is-linux [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ============================================================================
+ * Interactive Elements - Guarantee Clickability
+ * ============================================================================ */
+/* Ensure all interactive elements can receive clicks */
+.is-linux button:not([disabled]),
+.is-linux a,
+.is-linux input:not([disabled]),
+.is-linux textarea:not([disabled]),
+.is-linux select:not([disabled]),
+.is-linux [role="button"],
+.is-linux [role="link"],
+.is-linux [tabindex] {
+  pointer-events: auto !important;
+}
+
+/* ============================================================================
+ * Framer Motion - NEVER interfere with animations
+ * ============================================================================ */
+/* CRITICAL: Never touch framer-motion elements */
+.is-linux [data-framer-name],
+.is-linux [data-framer-component],
+.is-linux [data-framer-appear-id],
+.is-linux [class*="framer-"] {
+  /* Let framer-motion handle everything */
+  /* Don't override anything */
+}
+
+/* ============================================================================
+ * Animation Support - Allow all animations to work
+ * ============================================================================ */
+/* Don't interfere with any animations or transitions */
+.is-linux [class*="animate-"],
+.is-linux [style*="transition"],
+.is-linux [style*="animation"] {
+  /* Allow all animations to work naturally */
+}

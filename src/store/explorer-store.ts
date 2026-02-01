@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { schemaApi, queryApi } from '../infrastructure/tauri-api';
 import { AdminAdapterFactory } from '../infrastructure/admin-adapters';
+import { schemaCatalog } from '../sql-completion/schema-catalog';
 import { DatabaseEngine, CellValue, ConnectionStatus } from '../domain/types';
 
 // Helper to extract value from CellValue
@@ -592,6 +593,15 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
           console.log('[Explorer] Loading tables for schema:', { connectionId, schema });
           const tables = await schemaApi.listTables(connectionId, schema);
           console.log('[Explorer] Tables loaded:', tables);
+          
+          // Actualizar el catálogo de esquema con las tablas cargadas
+          tables.forEach(table => {
+            // Asegurar que el schema esté establecido (PostgreSQL lo necesita para el nombre completo)
+            if (!table.schema && schema) {
+              table.schema = schema;
+            }
+            schemaCatalog.updateTable(table);
+          });
           
           for (const table of tables) {
             const tableNodeId = createNodeId('table', connectionId, schema, table.name);
