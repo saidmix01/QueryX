@@ -33,7 +33,6 @@ export function Sidebar() {
                 ? 'bg-matrix-900/50 text-matrix-400 shadow-glow-sm'
                 : 'text-dark-muted hover:text-matrix-400 hover:bg-dark-hover/50'
             )}
-            title={label}
           >
             <Icon className="w-4 h-4" />
             {/* Indicador activo */}
@@ -59,7 +58,6 @@ export function Sidebar() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className="w-8 h-8 rounded-md flex items-center justify-center text-matrix-500 hover:bg-matrix-900/50 hover:text-matrix-400 transition-all duration-150 group relative"
-          title="New Connection"
         >
           <Plus className="w-4 h-4" />
           <span className="absolute left-full ml-2 px-2 py-1 bg-dark-elevated/95 backdrop-blur-sm border border-dark-border/50 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
