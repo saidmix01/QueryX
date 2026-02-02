@@ -47,11 +47,23 @@ impl FileSavedQueryRepository {
             let content = fs::read_to_string(&self.storage_path).await.map_err(|e| {
                 DomainError::internal(format!("Failed to read saved queries: {}", e))
             })?;
-
-            let storage: SavedQueryStorage = serde_json::from_str(&content).map_err(|e| {
-                DomainError::internal(format!("Failed to parse saved queries: {}", e))
-            })?;
-
+            let parsed = serde_json::from_str::<SavedQueryStorage>(&content);
+            let storage = match parsed {
+                Ok(s) => s,
+                Err(_) => {
+                    let bak_path = self.storage_path.with_extension("bak");
+                    if bak_path.exists() {
+                        let bak_content = fs::read_to_string(&bak_path).await.map_err(|e| {
+                            DomainError::internal(format!("Failed to read saved queries backup: {}", e))
+                        })?;
+                        serde_json::from_str::<SavedQueryStorage>(&bak_content).map_err(|e| {
+                            DomainError::internal(format!("Failed to parse saved queries backup: {}", e))
+                        })?
+                    } else {
+                        SavedQueryStorage::default()
+                    }
+                }
+            };
             *self.cache.write().await = storage;
         }
 
@@ -64,8 +76,16 @@ impl FileSavedQueryRepository {
             DomainError::internal(format!("Failed to serialize saved queries: {}", e))
         })?;
 
-        fs::write(&self.storage_path, content).await.map_err(|e| {
-            DomainError::internal(format!("Failed to write saved queries: {}", e))
+        let tmp_path = self.storage_path.with_extension("tmp");
+        fs::write(&tmp_path, content).await.map_err(|e| {
+            DomainError::internal(format!("Failed to write temp saved queries: {}", e))
+        })?;
+        if self.storage_path.exists() {
+            let bak_path = self.storage_path.with_extension("bak");
+            let _ = fs::rename(&self.storage_path, &bak_path).await;
+        }
+        fs::rename(&tmp_path, &self.storage_path).await.map_err(|e| {
+            DomainError::internal(format!("Failed to commit saved queries: {}", e))
         })?;
 
         Ok(())

@@ -21,6 +21,7 @@ export interface Connection {
   file_path?: string;
   ssl: SslConfig;
   color?: string;
+  read_only?: boolean;
   created_at: string;
   updated_at: string;
   last_connected_at?: string;
@@ -37,6 +38,7 @@ export interface CreateConnectionDto {
   file_path?: string;
   ssl?: SslConfig;
   color?: string;
+  read_only?: boolean;
 }
 
 export interface UpdateConnectionDto {
@@ -48,6 +50,7 @@ export interface UpdateConnectionDto {
   password?: string;
   ssl?: SslConfig;
   color?: string;
+  read_only?: boolean;
 }
 
 export type ConnectionStatus = 

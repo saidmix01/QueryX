@@ -72,6 +72,10 @@ impl QueryUseCase {
     }
 
     pub async fn execute_statement(&self, connection_id: Uuid, statement: &str) -> Result<u64, DomainError> {
+        let conn = self.connection_use_case.get_connection(connection_id).await?;
+        if conn.read_only && Self::is_destructive(statement) {
+            return Err(DomainError::validation("Conexión en modo solo lectura: operación bloqueada"));
+        }
         let driver = self.connection_use_case.get_active_driver(connection_id).await?;
         let result = driver.execute_statement(statement).await;
 
@@ -91,14 +95,36 @@ impl QueryUseCase {
     }
 
     pub async fn execute_multi_statement(&self, connection_id: Uuid, statements: Vec<String>) -> Result<Vec<crate::domain::StatementResult>, DomainError> {
+        let conn = self.connection_use_case.get_connection(connection_id).await?;
+        if conn.read_only {
+            for s in &statements {
+                if Self::is_destructive(s) {
+                    return Err(DomainError::validation("Conexión en modo solo lectura: operación bloqueada"));
+                }
+            }
+        }
         let driver = self.connection_use_case.get_active_driver(connection_id).await?;
         driver.execute_multi_statement(statements).await
     }
 
     pub async fn execute_in_transaction(&self, connection_id: Uuid, statement: &str) -> Result<crate::domain::TransactionResult, DomainError> {
+        let conn = self.connection_use_case.get_connection(connection_id).await?;
+        if conn.read_only && Self::is_destructive(statement) {
+            return Err(DomainError::validation("Conexión en modo solo lectura: operación bloqueada"));
+        }
         let driver = self.connection_use_case.get_active_driver(connection_id).await?;
         driver.execute_in_transaction(statement).await
     }
+
+
+fn is_destructive(sql: &str) -> bool {
+    let normalized = sql.trim().to_uppercase();
+    normalized.starts_with("UPDATE")
+        || normalized.starts_with("DELETE")
+        || normalized.starts_with("DROP")
+        || normalized.starts_with("TRUNCATE")
+        || normalized.starts_with("ALTER")
+}
 
     pub async fn get_history(&self, connection_id: Uuid, limit: usize) -> Result<Vec<QueryHistoryEntry>, DomainError> {
         let repo = self.get_history_repo().await?;

@@ -35,6 +35,7 @@ export function ConnectionModal() {
     username: '',
     password: '',
     file_path: '',
+    read_only: false,
   });
 
   const [isTesting, setIsTesting] = useState(false);
@@ -63,6 +64,7 @@ export function ConnectionModal() {
       username: isSQLite ? undefined : safeUsername,
       password: isSQLite ? undefined : safePassword,
       file_path: isSQLite ? safeFilePath : undefined,
+      read_only: form.read_only ?? false,
     };
     
     // Doble seguridad: clonación profunda para romper cualquier referencia oculta
@@ -91,6 +93,7 @@ export function ConnectionModal() {
         username: editingConnection.username || '',
         password: '',
         file_path: editingConnection.file_path || '',
+        read_only: editingConnection.read_only ?? false,
       });
     }
   }, [editingConnection]);
@@ -122,6 +125,7 @@ export function ConnectionModal() {
           database: payload.database,
           username: payload.username,
           password: payload.password || undefined,
+          read_only: payload.read_only,
         });
       } else {
         await createConnection(payload);
@@ -312,6 +316,25 @@ export function ConnectionModal() {
               {error}
             </div>
           )}
+
+        {/* Read-Only Mode */}
+        <div className="flex items-center justify-between p-3 border border-dark-border rounded-lg">
+          <div>
+            <div className="text-sm font-semibold">Read-Only Mode</div>
+            <div className="text-xs text-dark-muted">
+              Bloquea operaciones destructivas (UPDATE/DELETE/DROP/TRUNCATE/ALTER)
+            </div>
+          </div>
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="toggle"
+              checked={!!form.read_only}
+              onChange={(e) => setForm((f) => ({ ...f, read_only: e.target.checked }))}
+            />
+            <span className="text-sm">{form.read_only ? 'ON' : 'OFF'}</span>
+          </label>
+        </div>
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4">

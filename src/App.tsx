@@ -20,6 +20,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { invoke } from '@tauri-apps/api/tauri';
 import { NotificationCenter } from './components/NotificationCenter';
 import { setupGlobalErrorHandlers } from './utils/global-error-handler';
+import { DestructiveOperationModal } from './components/DestructiveOperationModal';
 
 interface LaunchFileContent {
   path: string;
@@ -29,6 +30,8 @@ interface LaunchFileContent {
 function App() {
   const loadConnections = useConnectionStore((s) => s.loadConnections);
   const isConnectionModalOpen = useUIStore((s) => s.isConnectionModalOpen);
+  const destructiveModal = useUIStore((s) => s.destructiveOperationModal);
+  const closeDestructive = useUIStore((s) => s.closeDestructiveOperation);
   const { activeConnectionId } = useConnectionStore();
   const { restoreWorkspace } = useWorkspaceStore();
   const { addTab } = useQueryStore();
@@ -145,6 +148,16 @@ function App() {
       <AboutModal />
       <ResultPanelsManager />
       <NotificationCenter />
+      {destructiveModal && (
+        <DestructiveOperationModal
+          operation={destructiveModal.operation}
+          onConfirm={async () => {
+            await destructiveModal.onConfirm();
+            closeDestructive();
+          }}
+          onCancel={() => closeDestructive()}
+        />
+      )}
     </div>
   );
 }
