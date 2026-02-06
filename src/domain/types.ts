@@ -59,6 +59,11 @@ export type ConnectionStatus =
   | 'Connected' 
   | { Error: string };
 
+export interface ActiveContext {
+  database?: string;
+  schema?: string;
+}
+
 export interface ColumnInfo {
   name: string;
   data_type: string;

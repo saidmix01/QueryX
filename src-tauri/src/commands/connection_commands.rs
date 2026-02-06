@@ -86,3 +86,32 @@ pub async fn get_connection_status(
     let uuid = Uuid::parse_str(&id).map_err(|_| DomainError::validation("Invalid UUID"))?;
     Ok(state.get_connection_status(uuid).await)
 }
+
+#[tauri::command]
+pub async fn change_database(
+    state: State<'_, ConnectionState>,
+    id: String,
+    database: String,
+) -> Result<(), DomainError> {
+    let uuid = Uuid::parse_str(&id).map_err(|_| DomainError::validation("Invalid UUID"))?;
+    state.change_database(uuid, database).await
+}
+
+#[tauri::command]
+pub async fn change_schema(
+    state: State<'_, ConnectionState>,
+    id: String,
+    schema: String,
+) -> Result<(), DomainError> {
+    let uuid = Uuid::parse_str(&id).map_err(|_| DomainError::validation("Invalid UUID"))?;
+    state.change_schema(uuid, schema).await
+}
+
+#[tauri::command]
+pub async fn get_active_context(
+    state: State<'_, ConnectionState>,
+    id: String,
+) -> Result<(Option<String>, Option<String>), DomainError> {
+    let uuid = Uuid::parse_str(&id).map_err(|_| DomainError::validation("Invalid UUID"))?;
+    Ok(state.get_active_context(uuid).await.unwrap_or((None, None)))
+}

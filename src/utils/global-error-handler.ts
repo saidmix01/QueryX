@@ -29,19 +29,29 @@ export function isCancellation(e: unknown): boolean {
   return false;
 }
 
+// Errores que no queremos mostrar al usuario como toasts
+export function isIgnorableError(e: unknown): boolean {
+    const msg = normalizeError(e).toLowerCase();
+    return (
+        msg.includes('resizeobserver') || 
+        msg.includes('script error') ||
+        msg.includes('connection lost') // A veces pasa al recargar
+    );
+}
+
 export function setupGlobalErrorHandlers() {
   const { error } = useNotificationStore.getState();
 
   if (!(window as any).__qxGlobalErrorsInstalled) {
     window.addEventListener('error', (ev) => {
       const reason = ev.error ?? ev.message;
-      if (isCancellation(reason)) return;
+      if (isCancellation(reason) || isIgnorableError(reason)) return;
       const msg = normalizeError(reason);
       error(msg, { variant: 'toast', source: 'ui', autoCloseMs: 10000, persistent: false });
     });
     window.addEventListener('unhandledrejection', (ev) => {
       const reason = ev.reason;
-      if (isCancellation(reason)) return;
+      if (isCancellation(reason) || isIgnorableError(reason)) return;
       const msg = normalizeError(reason);
       error(msg, { variant: 'toast', source: 'ui', autoCloseMs: 10000, persistent: false });
     });

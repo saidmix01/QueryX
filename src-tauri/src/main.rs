@@ -243,6 +243,9 @@ fn main() {
             connect,
             disconnect,
             get_connection_status,
+            change_database,
+            change_schema,
+            get_active_context,
             // Query commands
             execute_query,
             execute_statement,

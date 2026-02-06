@@ -4,6 +4,7 @@ import type {
   ConnectionStatus,
   CreateConnectionDto,
   UpdateConnectionDto,
+  ActiveContext,
 } from '../domain/types';
 import { connectionApi } from '../infrastructure/tauri-api';
 import { useNotificationStore } from './notification-store';
@@ -13,6 +14,7 @@ interface ConnectionState {
   connections: Connection[];
   activeConnectionId: string | null;
   connectionStatuses: Record<string, ConnectionStatus>;
+  activeContexts: Record<string, ActiveContext>;
   isLoading: boolean;
   error: string | null;
 
@@ -26,12 +28,17 @@ interface ConnectionState {
   disconnect: (id: string) => Promise<void>;
   setActiveConnection: (id: string | null) => void;
   refreshStatus: (id: string) => Promise<void>;
+  
+  changeDatabase: (id: string, database: string) => Promise<void>;
+  changeSchema: (id: string, schema: string) => Promise<void>;
+  refreshContext: (id: string) => Promise<void>;
 }
 
-export const useConnectionStore = create<ConnectionState>((set) => ({
+export const useConnectionStore = create<ConnectionState>((set, get) => ({
   connections: [],
   activeConnectionId: null,
   connectionStatuses: {},
+  activeContexts: {},
   isLoading: false,
   error: null,
 
@@ -97,6 +104,7 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
         connections: state.connections.filter((c) => c.id !== id),
         activeConnectionId:
           state.activeConnectionId === id ? null : state.activeConnectionId,
+        activeContexts: { ...state.activeContexts, [id]: {} as any }, // Clear context
       }));
       useNotificationStore.getState().info('Conexión eliminada', {
         variant: 'toast',
@@ -129,9 +137,17 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
     }));
     try {
       await connectionApi.connect(id);
+      
+      // Fetch initial context
+      const [db, schema] = await connectionApi.getActiveContext(id);
+      
       set((state) => ({
         connectionStatuses: { ...state.connectionStatuses, [id]: 'Connected' },
         activeConnectionId: id,
+        activeContexts: {
+            ...state.activeContexts,
+            [id]: { database: db || undefined, schema: schema || undefined }
+        }
       }));
     } catch (e) {
       set((state) => ({
@@ -156,6 +172,7 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
       set((state) => ({
         connectionStatuses: { ...state.connectionStatuses, [id]: 'Disconnected' },
         activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId,
+        activeContexts: { ...state.activeContexts, [id]: {} }, // Clear context
       }));
     } catch (e) {
       useNotificationStore.getState().error(normalizeError(e), {
@@ -174,8 +191,63 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
 
   refreshStatus: async (id) => {
     const status = await connectionApi.getStatus(id);
-    set((state) => ({
-      connectionStatuses: { ...state.connectionStatuses, [id]: status },
-    }));
+    if (status === 'Connected') {
+        const [db, schema] = await connectionApi.getActiveContext(id);
+        set((state) => ({
+            connectionStatuses: { ...state.connectionStatuses, [id]: status },
+            activeContexts: {
+                ...state.activeContexts,
+                [id]: { database: db || undefined, schema: schema || undefined }
+            }
+        }));
+    } else {
+        set((state) => ({
+            connectionStatuses: { ...state.connectionStatuses, [id]: status },
+        }));
+    }
   },
+
+  changeDatabase: async (id, database) => {
+    try {
+        await connectionApi.changeDatabase(id, database);
+        await get().refreshContext(id);
+    } catch (e) {
+        useNotificationStore.getState().error(normalizeError(e), {
+            variant: 'toast',
+            source: 'ipc',
+            autoCloseMs: 5000,
+            persistent: false,
+        });
+        throw e;
+    }
+  },
+
+  changeSchema: async (id, schema) => {
+    try {
+        await connectionApi.changeSchema(id, schema);
+        await get().refreshContext(id);
+    } catch (e) {
+        useNotificationStore.getState().error(normalizeError(e), {
+            variant: 'toast',
+            source: 'ipc',
+            autoCloseMs: 5000,
+            persistent: false,
+        });
+        throw e;
+    }
+  },
+
+  refreshContext: async (id) => {
+    try {
+        const [db, schema] = await connectionApi.getActiveContext(id);
+        set((state) => ({
+            activeContexts: {
+                ...state.activeContexts,
+                [id]: { database: db || undefined, schema: schema || undefined }
+            }
+        }));
+    } catch (e) {
+        console.error('Failed to refresh context', e);
+    }
+  }
 }));

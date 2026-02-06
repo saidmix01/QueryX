@@ -42,6 +42,15 @@ export const connectionApi = {
   
   getStatus: (id: string) => 
     invoke<ConnectionStatus>('get_connection_status', { id }),
+
+  changeDatabase: (id: string, database: string) =>
+    invoke<void>('change_database', { id, database }),
+
+  changeSchema: (id: string, schema: string) =>
+    invoke<void>('change_schema', { id, schema }),
+
+  getActiveContext: (id: string) =>
+    invoke<[string | null, string | null]>('get_active_context', { id }),
 };
 
 // Query API
