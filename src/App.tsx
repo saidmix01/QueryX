@@ -1,14 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Sidebar } from './components/Sidebar';
 import { MainContent } from './components/MainContent';
 import { ConnectionModal } from './components/ConnectionModal';
-import { QueryBuilder } from './components/QueryBuilder';
-import { CommandPalette } from './components/CommandPalette';
-import { WorkspaceRestoreIndicator } from './components/WorkspaceRestoreIndicator';
-import { AboutModal } from './components/AboutModal';
+const QueryBuilderLazy = lazy(() =>
+  import('./components/QueryBuilder').then((m) => ({ default: m.QueryBuilder }))
+);
+const CommandPaletteLazy = lazy(() =>
+  import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette }))
+);
+const WorkspaceRestoreIndicatorLazy = lazy(() =>
+  import('./components/WorkspaceRestoreIndicator').then((m) => ({ default: m.WorkspaceRestoreIndicator }))
+);
+const AboutModalLazy = lazy(() =>
+  import('./components/AboutModal').then((m) => ({ default: m.AboutModal }))
+);
 import { TitleBar } from './components/TitleBar';
-import { ResultPanelsManager } from './components/ResultPanelsManager';
+const ResultPanelsManagerLazy = lazy(() =>
+  import('./components/ResultPanelsManager').then((m) => ({ default: m.ResultPanelsManager }))
+);
 import { useConnectionStore } from './store/connection-store';
 import { useUIStore } from './store/ui-store';
 import { useWorkspaceStore } from './store/workspace-store';
@@ -18,9 +28,14 @@ import { setupWorkspaceAutoSave } from './store/workspace-store';
 import { Database, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { invoke } from '@tauri-apps/api/tauri';
-import { NotificationCenter } from './components/NotificationCenter';
+const NotificationCenterLazy = lazy(() =>
+  import('./components/NotificationCenter').then((m) => ({ default: m.NotificationCenter }))
+);
 import { setupGlobalErrorHandlers } from './utils/global-error-handler';
-import { DestructiveOperationModal } from './components/DestructiveOperationModal';
+import { ensureDefaultSchemaInitialized } from './utils/schema-init';
+const DestructiveOperationModalLazy = lazy(() =>
+  import('./components/DestructiveOperationModal').then((m) => ({ default: m.DestructiveOperationModal }))
+);
 
 interface LaunchFileContent {
   path: string;
@@ -43,8 +58,24 @@ function App() {
   }, []);
 
   useEffect(() => {
-    loadConnections();
-    setupWorkspaceAutoSave();
+    const defer = (fn: () => void) => {
+      const ric = (window as any).requestIdleCallback as
+        | ((cb: () => void, opts?: { timeout?: number }) => number)
+        | undefined;
+      if (typeof ric === 'function') {
+        try {
+          ric(fn, { timeout: 500 });
+          return;
+        } catch {
+          // no-op
+        }
+      }
+      setTimeout(fn, 50);
+    };
+    defer(() => {
+      loadConnections();
+      setupWorkspaceAutoSave();
+    });
   }, [loadConnections]);
 
   useEffect(() => {
@@ -52,11 +83,27 @@ function App() {
       restoreWorkspace(activeConnectionId);
     }
   }, [activeConnectionId, restoreWorkspace]);
+  
+  useEffect(() => {
+    if (!activeConnectionId) return;
+    const ua = navigator.userAgent.toLowerCase();
+    const isMac =
+      ua.includes('mac os') ||
+      ua.includes('macintosh') ||
+      document.documentElement.classList.contains('is-mac');
+    const conn = useConnectionStore.getState().connections.find((c) => c.id === activeConnectionId);
+    if (conn) {
+      ensureDefaultSchemaInitialized(conn, { force: isMac }).catch(() => {});
+    }
+  }, [activeConnectionId]);
 
   // Check for launch file
   useEffect(() => {
     async function checkLaunchFile() {
       try {
+        if (!(window as any).__TAURI_IPC__) {
+          return;
+        }
         const fileData = await invoke<LaunchFileContent | null>('get_launch_file');
         if (fileData) {
           const { path, content } = fileData;
@@ -80,7 +127,14 @@ function App() {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-dark-bg">
       {/* Barra de título personalizada */}
-      <TitleBar />
+      {(() => {
+        const ua = navigator.userAgent.toLowerCase();
+        const isMac =
+          ua.includes('mac os') ||
+          ua.includes('macintosh') ||
+          document.documentElement.classList.contains('is-mac');
+        return !isMac ? <TitleBar /> : null;
+      })()}
 
       {/* Main Layout */}
       <div className="flex-1 flex overflow-hidden">
@@ -141,22 +195,36 @@ function App() {
           </div>
         }
       >
-        <QueryBuilder />
+        <Suspense fallback={null}>
+          <QueryBuilderLazy />
+        </Suspense>
       </ErrorBoundary>
-      <CommandPalette />
-      <WorkspaceRestoreIndicator />
-      <AboutModal />
-      <ResultPanelsManager />
-      <NotificationCenter />
+      <Suspense fallback={null}>
+        <CommandPaletteLazy />
+      </Suspense>
+      <Suspense fallback={null}>
+        <WorkspaceRestoreIndicatorLazy />
+      </Suspense>
+      <Suspense fallback={null}>
+        <AboutModalLazy />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ResultPanelsManagerLazy />
+      </Suspense>
+      <Suspense fallback={null}>
+        <NotificationCenterLazy />
+      </Suspense>
       {destructiveModal && (
-        <DestructiveOperationModal
-          operation={destructiveModal.operation}
-          onConfirm={async () => {
-            await destructiveModal.onConfirm();
-            closeDestructive();
-          }}
-          onCancel={() => closeDestructive()}
-        />
+        <Suspense fallback={null}>
+          <DestructiveOperationModalLazy
+            operation={destructiveModal.operation}
+            onConfirm={async () => {
+              await destructiveModal.onConfirm();
+              closeDestructive();
+            }}
+            onCancel={() => closeDestructive()}
+          />
+        </Suspense>
       )}
     </div>
   );

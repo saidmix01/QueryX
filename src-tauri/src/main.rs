@@ -166,6 +166,7 @@ fn main() {
             #[cfg(not(target_os = "linux"))]
             {
                 if let Some(window) = app.handle().get_window("main") {
+                    let _ = window.set_decorations(true);
                     let _ = window.show();
                     let _ = window.set_focus();
                 }

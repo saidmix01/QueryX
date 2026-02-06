@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { X, AlertTriangle, Play } from 'lucide-react';
 import { queryApi } from '../../infrastructure/tauri-api';
 import { useConnectionStore } from '../../store/connection-store';
+import { normalizeError } from '../../utils/global-error-handler';
 
 interface SqlPreviewModalProps {
   isOpen: boolean;
@@ -44,7 +45,7 @@ export const SqlPreviewModal: React.FC<SqlPreviewModalProps> = ({
       onSuccess?.();
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(normalizeError(e));
     } finally {
       setIsExecuting(false);
     }

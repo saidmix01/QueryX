@@ -7,6 +7,7 @@ import type {
 } from '../domain/types';
 import { connectionApi } from '../infrastructure/tauri-api';
 import { useNotificationStore } from './notification-store';
+import { normalizeError } from '../utils/global-error-handler';
 
 interface ConnectionState {
   connections: Connection[];
@@ -40,8 +41,9 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
       const connections = await connectionApi.getAll();
       set({ connections, isLoading: false });
     } catch (e) {
-      set({ error: String(e), isLoading: false });
-      useNotificationStore.getState().error(String(e), {
+      const msg = normalizeError(e);
+      set({ error: msg, isLoading: false });
+      useNotificationStore.getState().error(msg, {
         variant: 'toast',
         source: 'ipc',
         persistent: false,
@@ -102,7 +104,7 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
         autoCloseMs: 3000,
       });
     } catch (e) {
-      useNotificationStore.getState().error(String(e), {
+      useNotificationStore.getState().error(normalizeError(e), {
         variant: 'toast',
         source: 'ipc',
         persistent: false,
@@ -135,10 +137,10 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
       set((state) => ({
         connectionStatuses: {
           ...state.connectionStatuses,
-          [id]: { Error: String(e) },
+          [id]: { Error: normalizeError(e) },
         },
       }));
-      useNotificationStore.getState().error(String(e), {
+      useNotificationStore.getState().error(normalizeError(e), {
         variant: 'toast',
         source: 'ipc',
         autoCloseMs: 10000,
@@ -156,7 +158,7 @@ export const useConnectionStore = create<ConnectionState>((set) => ({
         activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId,
       }));
     } catch (e) {
-      useNotificationStore.getState().error(String(e), {
+      useNotificationStore.getState().error(normalizeError(e), {
         variant: 'toast',
         source: 'ipc',
         autoCloseMs: 10000,

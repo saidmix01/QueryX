@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { SchemaInfo, TableInfo } from '../domain/schema-types';
 import { schemaApi } from '../infrastructure/tauri-api';
 import { schemaCatalog } from '../sql-completion/schema-catalog';
+import { normalizeError } from '../utils/global-error-handler';
 
 type PerConnectionState = {
   databases: string[];
@@ -70,7 +71,7 @@ export const useSchemaStore = create<SchemaState>((set, get) => ({
       }));
     } catch (e) {
       set((prev) => ({
-        errorByConnection: { ...prev.errorByConnection, [connectionId]: String(e) },
+        errorByConnection: { ...prev.errorByConnection, [connectionId]: normalizeError(e) },
         isLoadingByConnection: { ...prev.isLoadingByConnection, [connectionId]: false },
       }));
     }
@@ -99,7 +100,7 @@ export const useSchemaStore = create<SchemaState>((set, get) => ({
       }));
     } catch (e) {
       set((prev) => ({
-        errorByConnection: { ...prev.errorByConnection, [connectionId]: String(e) },
+        errorByConnection: { ...prev.errorByConnection, [connectionId]: normalizeError(e) },
         isLoadingByConnection: { ...prev.isLoadingByConnection, [connectionId]: false },
       }));
     }
@@ -150,7 +151,7 @@ export const useSchemaStore = create<SchemaState>((set, get) => ({
       });
     } catch (e) {
       set((prev) => ({
-        errorByConnection: { ...prev.errorByConnection, [connectionId]: String(e) },
+        errorByConnection: { ...prev.errorByConnection, [connectionId]: normalizeError(e) },
         isLoadingByConnection: { ...prev.isLoadingByConnection, [connectionId]: false },
       }));
     }
@@ -203,7 +204,7 @@ export const useSchemaStore = create<SchemaState>((set, get) => ({
       });
     } catch (e) {
       set((prev) => ({
-        errorByConnection: { ...prev.errorByConnection, [connectionId]: String(e) },
+        errorByConnection: { ...prev.errorByConnection, [connectionId]: normalizeError(e) },
         isLoadingByConnection: { ...prev.isLoadingByConnection, [connectionId]: false },
       }));
     }

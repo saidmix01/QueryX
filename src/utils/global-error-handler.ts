@@ -1,6 +1,6 @@
 import { useNotificationStore } from '../store/notification-store';
 
-function normalizeError(e: unknown): string {
+export function normalizeError(e: unknown): string {
   if (typeof e === 'string') return e;
   if (e && typeof e === 'object') {
     if ('message' in e) return String((e as any).message);
@@ -14,7 +14,7 @@ function normalizeError(e: unknown): string {
   return 'Unknown error';
 }
 
-function isCancellation(e: unknown): boolean {
+export function isCancellation(e: unknown): boolean {
   if (!e) return false;
   if (typeof e === 'string') {
     const s = e.toLowerCase();

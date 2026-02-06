@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../store/ui-store';
 import { useConnectionStore } from '../store/connection-store';
+import { normalizeError } from '../utils/global-error-handler';
 import type { DatabaseEngine, CreateConnectionDto } from '../domain/types';
 
 const engines: { value: DatabaseEngine; label: string; icon: string }[] = [
@@ -132,7 +133,7 @@ export function ConnectionModal() {
       }
       closeConnectionModal();
     } catch (e) {
-      setError(String(e));
+      setError(normalizeError(e));
     } finally {
       setIsSaving(false);
     }
@@ -165,7 +166,7 @@ export function ConnectionModal() {
       }
     } catch (e) {
       console.error('Connection test error:', e);
-      setError(String(e));
+      setError(normalizeError(e));
     } finally {
       setIsTesting(false);
     }

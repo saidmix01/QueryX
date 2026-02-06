@@ -6,6 +6,7 @@ import type {
   UpdateSavedQueryDto,
 } from '../domain/saved-query-types';
 import { savedQueryApi } from '../infrastructure/tauri-api';
+import { normalizeError } from '../utils/global-error-handler';
 
 interface SavedQueryState {
   queries: SavedQuery[];
@@ -36,7 +37,7 @@ export const useSavedQueryStore = create<SavedQueryState>((set) => ({
       const queries = await savedQueryApi.getByConnection(connectionId);
       set({ queries, isLoading: false });
     } catch (e) {
-      set({ error: String(e), isLoading: false });
+      set({ error: normalizeError(e), isLoading: false });
     }
   },
 
@@ -45,7 +46,7 @@ export const useSavedQueryStore = create<SavedQueryState>((set) => ({
       const folders = await savedQueryApi.getFolders(connectionId);
       set({ folders });
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: normalizeError(e) });
     }
   },
 
