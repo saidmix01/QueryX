@@ -42,10 +42,7 @@ export function MultiStatementResults({
 
   // Helper function to detect if query is editable (for insert/update)
   // Reused logic from ResultsTable indirectly via exports
-  const queryAnalysis = {
-    tableName: null as string | null,
-    schemaName: null as string | null,
-  }; 
+ 
   // Note: For multi-statement simple exports, we might not have full query analysis available 
   // without parsing each SQL again. For now, we will do basic exports.
 

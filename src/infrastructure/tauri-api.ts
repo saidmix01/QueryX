@@ -85,6 +85,19 @@ export const queryApi = {
 
   cancel: (connectionId: string) =>
     invoke<void>('cancel_query', { connectionId }),
+
+  insertRow: (
+    connectionId: string,
+    schema: string | null,
+    table: string,
+    values: Record<string, any>
+  ) =>
+    invoke<QueryResult>('insert_row', {
+      connectionId,
+      schema,
+      table,
+      values,
+    }),
 };
 
 // Schema API

@@ -163,7 +163,19 @@ fn main() {
             // ====================================================================
             // Since we set visible: false in tauri.conf.json, we must explicitly
             // show the window on all platforms if it hasn't been shown yet.
-            #[cfg(not(target_os = "linux"))]
+            
+            // For Windows: Disable decorations for custom title bar
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(window) = app.handle().get_window("main") {
+                    let _ = window.set_decorations(false);
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
+            // For MacOS and others (excluding Linux which is handled above, and Windows handled above)
+            #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
             {
                 if let Some(window) = app.handle().get_window("main") {
                     let _ = window.set_decorations(true);
@@ -248,6 +260,7 @@ fn main() {
             get_active_context,
             // Query commands
             execute_query,
+            insert_row,
             execute_statement,
             execute_multi_statement,
             execute_in_transaction,

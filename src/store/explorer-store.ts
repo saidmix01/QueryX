@@ -3,6 +3,7 @@ import { schemaApi, queryApi } from '../infrastructure/tauri-api';
 import { AdminAdapterFactory } from '../infrastructure/admin-adapters';
 import { schemaCatalog } from '../sql-completion/schema-catalog';
 import { DatabaseEngine, CellValue, ConnectionStatus } from '../domain/types';
+import { useConnectionStore } from './connection-store';
 
 // Helper to extract value from CellValue
 const getCellValue = (cell: CellValue | undefined): any => {
@@ -255,14 +256,17 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
         }
       };
       
-      // Auto-expand database if it matches the default one
+      // Auto-expand database if it matches the active one
       if (updatedNode.type === 'connection') {
-          const defaultDb = updatedNode.metadata?.database as string;
-          if (defaultDb) {
+          // Usar activeContext para determinar qué DB expandir, en lugar de la configuración estática
+          const activeContext = useConnectionStore.getState().activeContexts[connectionId];
+          const activeDb = activeContext?.database;
+          
+          if (activeDb) {
               const dbChildId = updatedNode.children.find(id => {
                   const child = get().nodes[id];
                   // Comparación insensible a mayúsculas
-                  return child && child.name.toLowerCase() === defaultDb.toLowerCase();
+                  return child && child.name.toLowerCase() === activeDb.toLowerCase();
               });
               if (dbChildId) {
                   await expandChild(dbChildId);

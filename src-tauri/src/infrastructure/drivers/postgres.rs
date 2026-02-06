@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use sqlx::{postgres::PgPoolOptions, PgPool, Row, Column, TypeInfo};
 use std::sync::Arc;
 use std::time::Instant;
+use std::collections::HashMap;
 use tokio::sync::RwLock;
 
 use crate::domain::{
@@ -196,6 +197,146 @@ impl SqlDriver for PostgresDriver {
         result = result.with_pagination(pagination);
 
         Ok(result)
+    }
+
+    async fn insert_row(
+        &self,
+        schema: Option<&str>,
+        table: &str,
+        values: HashMap<String, serde_json::Value>,
+    ) -> Result<QueryResult, DomainError> {
+        let pool = self.get_pool().await?;
+        let schema_name = schema.unwrap_or("public");
+
+        // 1. Obtener columnas para validar tipos y defaults
+        let columns_info = self.get_columns(table, Some(schema_name)).await?;
+        let col_map: HashMap<String, ColumnSchema> = columns_info
+            .iter()
+            .map(|c| (c.name.clone(), c.clone()))
+            .collect();
+
+        // 2. Filtrar y preparar valores
+        let mut valid_entries = Vec::new();
+        for (key, val) in values {
+            if let Some(info) = col_map.get(&key) {
+                // Si es null/vacío y tiene default o es auto-increment, lo omitimos para que la BD use el default
+                let is_empty = val.is_null() || (val.is_string() && val.as_str().unwrap().is_empty());
+                
+                if is_empty && (info.default_value.is_some() || info.is_auto_increment) {
+                    continue;
+                }
+                valid_entries.push((key, val, info.clone()));
+            }
+        }
+
+        if valid_entries.is_empty() {
+             // Si no hay valores y todos son defaults, hacemos un INSERT DEFAULT VALUES si es soportado,
+             // o INSERT INTO table DEFAULT VALUES
+             // Postgres soporta INSERT INTO table DEFAULT VALUES.
+             let sql = format!("INSERT INTO \"{}\".\"{}\" DEFAULT VALUES RETURNING *", schema_name, table);
+             
+             let mut tx = pool.begin().await.map_err(|e| DomainError::query(e.to_string()))?;
+             
+             let row = sqlx::query(&sql)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| DomainError::query(e.to_string()))?;
+                
+             tx.commit().await.map_err(|e| DomainError::query(e.to_string()))?;
+             
+             // Convertir row a QueryResult
+             let columns: Vec<ColumnInfo> = row.columns().iter().map(|col| ColumnInfo {
+                name: col.name().to_string(),
+                data_type: col.type_info().name().to_string(),
+                nullable: true, 
+                is_primary_key: false,
+            }).collect();
+
+            let data: Vec<Vec<CellValue>> = vec![
+                (0..row.columns().len())
+                    .map(|idx| Self::map_pg_value(&row, idx))
+                    .collect()
+            ];
+
+            return Ok(QueryResult::new(sql, columns, data));
+        }
+
+        // 3. Construir query dinámica
+        let cols_sql = valid_entries.iter().map(|(k,_,_)| format!("\"{}\"", k)).collect::<Vec<_>>().join(", ");
+        let vals_sql = (1..=valid_entries.len()).map(|i| format!("${}", i)).collect::<Vec<_>>().join(", ");
+        let sql = format!("INSERT INTO \"{}\".\"{}\" ({}) VALUES ({}) RETURNING *", schema_name, table, cols_sql, vals_sql);
+
+        // 4. Ejecutar en transacción
+        let mut tx = pool.begin().await.map_err(|e| DomainError::query(e.to_string()))?;
+        
+        let mut query_builder = sqlx::query(&sql);
+        
+        for (_, val, info) in &valid_entries {
+            let type_name = info.data_type.to_lowercase();
+            
+            // Lógica de binding según tipo
+            if type_name.contains("bool") {
+                 query_builder = query_builder.bind(val.as_bool());
+            } else if type_name.contains("int") || type_name.contains("serial") {
+                 if let Some(i) = val.as_i64() {
+                     if type_name.contains("int2") || type_name.contains("smallint") {
+                         query_builder = query_builder.bind(i as i16);
+                     } else if type_name.contains("int4") || type_name.contains("integer") {
+                         query_builder = query_builder.bind(i as i32);
+                     } else {
+                         query_builder = query_builder.bind(i);
+                     }
+                 } else {
+                     query_builder = query_builder.bind(Option::<i64>::None);
+                 }
+            } else if type_name.contains("float") || type_name.contains("real") || type_name.contains("double") {
+                 query_builder = query_builder.bind(val.as_f64());
+            } else if type_name.contains("json") {
+                 query_builder = query_builder.bind(val);
+            } else if type_name.contains("uuid") {
+                 if let Some(s) = val.as_str() {
+                     if let Ok(u) = uuid::Uuid::parse_str(s) {
+                         query_builder = query_builder.bind(u);
+                     } else {
+                         query_builder = query_builder.bind(Option::<uuid::Uuid>::None);
+                     }
+                 } else {
+                     query_builder = query_builder.bind(Option::<uuid::Uuid>::None);
+                 }
+            } else {
+                 // Text, Varchar, Date, Time, etc. - Bind as string
+                 if val.is_null() {
+                     query_builder = query_builder.bind(Option::<String>::None);
+                 } else if let Some(s) = val.as_str() {
+                     query_builder = query_builder.bind(s);
+                 } else {
+                     query_builder = query_builder.bind(val.to_string());
+                 }
+            }
+        }
+
+        let row = query_builder
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| DomainError::query(e.to_string()))?;
+
+        tx.commit().await.map_err(|e| DomainError::query(e.to_string()))?;
+
+        // 5. Formatear resultado
+        let columns: Vec<ColumnInfo> = row.columns().iter().map(|col| ColumnInfo {
+            name: col.name().to_string(),
+            data_type: col.type_info().name().to_string(),
+            nullable: true,
+            is_primary_key: false,
+        }).collect();
+
+        let data: Vec<Vec<CellValue>> = vec![
+            (0..row.columns().len())
+                .map(|idx| Self::map_pg_value(&row, idx))
+                .collect()
+        ];
+
+        Ok(QueryResult::new(sql, columns, data))
     }
 
     async fn execute_statement(&self, statement: &str) -> Result<u64, DomainError> {

@@ -230,9 +230,9 @@ impl ConnectionUseCase {
                 if conn.current_database.as_ref() == Some(&database_name) {
                     return Ok(());
                 }
-            } else {
-                 return Err(DomainError::connection("Connection not active"));
             }
+            // Si no hay conexión activa, permitimos continuar para intentar reconectar
+            // directamente a la nueva base de datos.
         }
 
         // Modificamos temporalmente la configuración para conectar a la nueva DB

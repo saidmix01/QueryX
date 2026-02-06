@@ -252,8 +252,7 @@ export function DatabaseTree() {
     connect, 
     disconnect, 
     deleteConnection, 
-    setActiveConnection,
-    updateConnection
+    setActiveConnection
   } = useConnectionStore();
   
   const { addTab, setActiveTab, executeQuery } = useQueryStore();

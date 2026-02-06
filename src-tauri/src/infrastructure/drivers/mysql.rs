@@ -192,6 +192,152 @@ impl SqlDriver for MySqlDriver {
         Ok(result)
     }
 
+    async fn insert_row(
+        &self,
+        schema: Option<&str>,
+        table: &str,
+        values: std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<QueryResult, DomainError> {
+        let pool = self.get_pool().await?;
+        // MySQL no usa schemas como PG, el schema es la base de datos
+        let _db = schema.unwrap_or("DATABASE()"); // o el contexto actual
+        
+        // 1. Obtener columnas para validar tipos y defaults
+        let columns_info = self.get_columns(table, schema).await?;
+        let col_map: std::collections::HashMap<String, ColumnSchema> = columns_info
+            .iter()
+            .map(|c| (c.name.clone(), c.clone()))
+            .collect();
+
+        // 2. Filtrar y preparar valores
+        let mut valid_entries = Vec::new();
+        for (key, val) in values {
+            if let Some(info) = col_map.get(&key) {
+                // Si es null/vacío y tiene default o es auto-increment, lo omitimos
+                let is_empty = val.is_null() || (val.is_string() && val.as_str().unwrap().is_empty());
+                
+                if is_empty && (info.default_value.is_some() || info.is_auto_increment) {
+                    continue;
+                }
+                valid_entries.push((key, val, info.clone()));
+            }
+        }
+
+        if valid_entries.is_empty() {
+             // INSERT VALUES () no es estándar en MySQL, se usa INSERT INTO table () VALUES () o DEFAULT VALUES si soporta
+             // MySQL: INSERT INTO table VALUES () o INSERT INTO table () VALUES ()
+             let sql = format!("INSERT INTO {} () VALUES ()", table);
+             
+             let result = sqlx::query(&sql)
+                .execute(&pool)
+                .await
+                .map_err(|e| DomainError::query(e.to_string()))?;
+                
+             let last_id = result.last_insert_id();
+             
+             // Intentar recuperar la fila insertada si hay PK
+             if last_id > 0 {
+                 let pk_col = columns_info.iter().find(|c| c.is_primary_key || c.is_auto_increment);
+                 if let Some(pk) = pk_col {
+                     let fetch_sql = format!("SELECT * FROM {} WHERE {} = ?", table, pk.name);
+                     let rows = sqlx::query(&fetch_sql)
+                         .bind(last_id)
+                         .fetch_all(&pool)
+                         .await
+                         .map_err(|e| DomainError::query(e.to_string()))?;
+                         
+                     if let Some(row) = rows.first() {
+                         let columns: Vec<ColumnInfo> = row.columns().iter().map(|col| ColumnInfo {
+                            name: col.name().to_string(),
+                            data_type: col.type_info().name().to_string(),
+                            nullable: true, 
+                            is_primary_key: false,
+                        }).collect();
+            
+                        let data: Vec<Vec<CellValue>> = vec![
+                            (0..row.columns().len())
+                                .map(|idx| Self::map_mysql_value(row, idx))
+                                .collect()
+                        ];
+                        return Ok(QueryResult::new(sql, columns, data));
+                     }
+                 }
+             }
+             
+             // Si no pudimos recuperar, devolvemos resultado vacío con métricas
+             return Ok(QueryResult::new(sql, vec![], vec![]).with_affected_rows(result.rows_affected()));
+        }
+
+        // 3. Construir query dinámica
+        let cols_sql = valid_entries.iter().map(|(k,_,_)| format!("`{}`", k)).collect::<Vec<_>>().join(", ");
+        let vals_sql = (0..valid_entries.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!("INSERT INTO {} ({}) VALUES ({})", table, cols_sql, vals_sql);
+
+        // 4. Ejecutar
+        let mut query_builder = sqlx::query(&sql);
+        
+        for (_, val, info) in &valid_entries {
+            let type_name = info.data_type.to_lowercase();
+            
+            if type_name.contains("bool") || type_name.contains("tinyint(1)") {
+                 query_builder = query_builder.bind(val.as_bool());
+            } else if type_name.contains("int") {
+                 if let Some(i) = val.as_i64() {
+                     query_builder = query_builder.bind(i);
+                 } else {
+                     query_builder = query_builder.bind(Option::<i64>::None);
+                 }
+            } else if type_name.contains("float") || type_name.contains("double") || type_name.contains("decimal") {
+                 query_builder = query_builder.bind(val.as_f64());
+            } else {
+                 if val.is_null() {
+                     query_builder = query_builder.bind(Option::<String>::None);
+                 } else if let Some(s) = val.as_str() {
+                     query_builder = query_builder.bind(s);
+                 } else {
+                     query_builder = query_builder.bind(val.to_string());
+                 }
+            }
+        }
+
+        let result = query_builder
+            .execute(&pool)
+            .await
+            .map_err(|e| DomainError::query(e.to_string()))?;
+
+        // 5. Intentar recuperar la fila
+        let last_id = result.last_insert_id();
+        if last_id > 0 {
+             let pk_col = columns_info.iter().find(|c| c.is_primary_key || c.is_auto_increment);
+             if let Some(pk) = pk_col {
+                 let fetch_sql = format!("SELECT * FROM {} WHERE {} = ?", table, pk.name);
+                 let rows = sqlx::query(&fetch_sql)
+                     .bind(last_id)
+                     .fetch_all(&pool)
+                     .await
+                     .map_err(|e| DomainError::query(e.to_string()))?;
+                     
+                 if let Some(row) = rows.first() {
+                     let columns: Vec<ColumnInfo> = row.columns().iter().map(|col| ColumnInfo {
+                        name: col.name().to_string(),
+                        data_type: col.type_info().name().to_string(),
+                        nullable: true, 
+                        is_primary_key: false,
+                    }).collect();
+        
+                    let data: Vec<Vec<CellValue>> = vec![
+                        (0..row.columns().len())
+                            .map(|idx| Self::map_mysql_value(row, idx))
+                            .collect()
+                    ];
+                    return Ok(QueryResult::new(sql, columns, data));
+                 }
+             }
+        }
+
+        Ok(QueryResult::new(sql, vec![], vec![]).with_affected_rows(result.rows_affected()))
+    }
+
     async fn execute_statement(&self, statement: &str) -> Result<u64, DomainError> {
         let pool = self.get_pool().await?;
 

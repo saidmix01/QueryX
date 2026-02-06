@@ -28,6 +28,18 @@ pub async fn execute_query(
 }
 
 #[tauri::command]
+pub async fn insert_row(
+    state: State<'_, QueryState>,
+    connection_id: String,
+    schema: Option<String>,
+    table: String,
+    values: std::collections::HashMap<String, serde_json::Value>,
+) -> Result<QueryResult, DomainError> {
+    let uuid = Uuid::parse_str(&connection_id).map_err(|_| DomainError::validation("Invalid UUID"))?;
+    state.insert_row(uuid, schema, table, values).await
+}
+
+#[tauri::command]
 pub async fn execute_multi_statement(
     state: State<'_, QueryState>,
     connection_id: String,

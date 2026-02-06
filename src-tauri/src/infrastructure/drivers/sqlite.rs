@@ -132,6 +132,133 @@ impl SqlDriver for SqliteDriver {
         Ok(result)
     }
 
+    async fn insert_row(
+        &self,
+        _schema: Option<&str>,
+        table: &str,
+        values: std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<QueryResult, DomainError> {
+        let pool = self.get_pool().await?;
+        
+        // 1. Obtener columnas
+        let columns_info = self.get_columns(table, None).await?;
+        let col_map: std::collections::HashMap<String, ColumnSchema> = columns_info
+            .iter()
+            .map(|c| (c.name.clone(), c.clone()))
+            .collect();
+
+        // 2. Preparar valores
+        let mut valid_entries = Vec::new();
+        for (key, val) in values {
+            if let Some(info) = col_map.get(&key) {
+                let is_empty = val.is_null() || (val.is_string() && val.as_str().unwrap().is_empty());
+                // SQLite no tiene AUTO_INCREMENT en columnas no-PK tan estricto, pero ROWID sí.
+                // Si es PK INTEGER, es auto-increment por defecto.
+                if is_empty && (info.default_value.is_some() || info.is_primary_key) {
+                    continue;
+                }
+                valid_entries.push((key, val, info.clone()));
+            }
+        }
+
+        let sql = if valid_entries.is_empty() {
+             format!("INSERT INTO {} DEFAULT VALUES", table)
+        } else {
+             let cols_sql = valid_entries.iter().map(|(k,_,_)| format!("\"{}\"", k)).collect::<Vec<_>>().join(", ");
+             let vals_sql = (0..valid_entries.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
+             format!("INSERT INTO {} ({}) VALUES ({})", table, cols_sql, vals_sql)
+        };
+
+        // 3. Ejecutar
+        // SQLite soporta RETURNING * en versiones recientes (3.35+). 
+        // Intentaremos usar RETURNING * si es posible.
+        let sql_returning = format!("{} RETURNING *", sql);
+        
+        let mut query_builder = sqlx::query(&sql_returning);
+        for (_, val, _) in &valid_entries {
+             if val.is_null() {
+                 query_builder = query_builder.bind(Option::<String>::None);
+             } else if let Some(b) = val.as_bool() {
+                 query_builder = query_builder.bind(b);
+             } else if let Some(i) = val.as_i64() {
+                 query_builder = query_builder.bind(i);
+             } else if let Some(f) = val.as_f64() {
+                 query_builder = query_builder.bind(f);
+             } else {
+                 let s = val.as_str().map(|s| s.to_string()).unwrap_or_else(|| val.to_string());
+                 query_builder = query_builder.bind(s);
+             }
+        }
+
+        // Intentar ejecutar con RETURNING
+        let result = query_builder.fetch_one(&pool).await;
+
+        match result {
+            Ok(row) => {
+                let columns: Vec<ColumnInfo> = row.columns().iter().map(|col| ColumnInfo {
+                    name: col.name().to_string(),
+                    data_type: col.type_info().name().to_string(),
+                    nullable: true,
+                    is_primary_key: false,
+                }).collect();
+
+                let data: Vec<Vec<CellValue>> = vec![
+                    (0..row.columns().len())
+                        .map(|idx| Self::map_sqlite_value(&row, idx))
+                        .collect()
+                ];
+                Ok(QueryResult::new(sql_returning, columns, data))
+            },
+            Err(_) => {
+                // Fallback si RETURNING falla (versión vieja de SQLite)
+                // Ejecutar INSERT normal y luego SELECT
+                let mut query_builder = sqlx::query(&sql);
+                for (_, val, _) in &valid_entries {
+                     if val.is_null() {
+                         query_builder = query_builder.bind(Option::<String>::None);
+                     } else if let Some(b) = val.as_bool() {
+                         query_builder = query_builder.bind(b);
+                     } else if let Some(i) = val.as_i64() {
+                         query_builder = query_builder.bind(i);
+                     } else if let Some(f) = val.as_f64() {
+                         query_builder = query_builder.bind(f);
+                     } else {
+                         let s = val.as_str().map(|s| s.to_string()).unwrap_or_else(|| val.to_string());
+                         query_builder = query_builder.bind(s);
+                     }
+                }
+                
+                let exec_result = query_builder.execute(&pool).await
+                    .map_err(|e| DomainError::query(e.to_string()))?;
+                
+                let last_id = exec_result.last_insert_rowid();
+                
+                // Fetch inserted row using ROWID
+                let fetch_sql = format!("SELECT * FROM {} WHERE rowid = ?", table);
+                let row = sqlx::query(&fetch_sql)
+                    .bind(last_id)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| DomainError::query(e.to_string()))?;
+
+                let columns: Vec<ColumnInfo> = row.columns().iter().map(|col| ColumnInfo {
+                    name: col.name().to_string(),
+                    data_type: col.type_info().name().to_string(),
+                    nullable: true,
+                    is_primary_key: false,
+                }).collect();
+
+                let data: Vec<Vec<CellValue>> = vec![
+                    (0..row.columns().len())
+                        .map(|idx| Self::map_sqlite_value(&row, idx))
+                        .collect()
+                ];
+                
+                Ok(QueryResult::new(sql, columns, data))
+            }
+        }
+    }
+
     async fn execute_statement(&self, statement: &str) -> Result<u64, DomainError> {
         let pool = self.get_pool().await?;
         let result = sqlx::query(statement).execute(&pool).await
