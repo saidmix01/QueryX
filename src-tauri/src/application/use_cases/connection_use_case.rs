@@ -12,13 +12,21 @@ use crate::domain::{
 use crate::infrastructure::drivers::DriverFactory;
 use crate::infrastructure::FileConnectionRepository;
 
+#[derive(Clone)]
+pub struct ActiveConnection {
+    pub driver: Arc<dyn SqlDriver>,
+    pub status: ConnectionStatus,
+    pub current_database: Option<String>,
+    pub current_schema: Option<String>,
+}
+
 /// Caso de uso para gestión de conexiones
 pub struct ConnectionUseCase {
     data_dir: PathBuf,
     connection_repo: OnceCell<Arc<dyn ConnectionRepository>>,
     credential_store: Arc<dyn CredentialStore>,
     driver_factory: DriverFactory,
-    active_connections: Arc<RwLock<HashMap<Uuid, (Arc<dyn SqlDriver>, ConnectionStatus)>>>,
+    active_connections: Arc<RwLock<HashMap<Uuid, ActiveConnection>>>,
 }
 
 impl ConnectionUseCase {
@@ -119,6 +127,21 @@ impl ConnectionUseCase {
     }
 
     pub async fn connect(&self, id: Uuid) -> Result<(), DomainError> {
+        // Idempotencia y prevención de duplicados
+        {
+            let active = self.active_connections.read().await;
+            if let Some(conn) = active.get(&id) {
+                match conn.status {
+                    ConnectionStatus::Connected => return Ok(()),
+                    ConnectionStatus::Connecting => return Err(DomainError::connection("Connection already in progress")),
+                    _ => {}
+                }
+            }
+        }
+
+        // Limpiar conexión previa si existe
+        self.disconnect(id).await.ok();
+
         let connection = self.get_connection(id).await?;
         let password = self.credential_store.retrieve(id).await?.unwrap_or_default();
         let conn_string = self.build_connection_string(&connection, &password);
@@ -128,22 +151,37 @@ impl ConnectionUseCase {
 
         let driver: Arc<dyn SqlDriver> = Arc::from(self.driver_factory.create_new_driver(&connection.engine));
         
+        // Marcar como Connecting
         {
             let mut active = self.active_connections.write().await;
-            active.insert(id, (driver.clone(), ConnectionStatus::Connecting));
+            active.insert(id, ActiveConnection {
+                driver: driver.clone(),
+                status: ConnectionStatus::Connecting,
+                current_database: connection.get_default_database(),
+                current_schema: None, // Por defecto no hay schema seleccionado explícitamente (o es public)
+            });
         }
 
         match driver.connect(&conn_string).await {
             Ok(()) => {
                 let mut active = self.active_connections.write().await;
-                active.insert(id, (driver, ConnectionStatus::Connected));
+                if let Some(conn) = active.get_mut(&id) {
+                    conn.status = ConnectionStatus::Connected;
+                    // Actualizar el contexto inicial si es posible
+                    if connection.engine == DatabaseEngine::PostgreSQL {
+                         conn.current_schema = Some("public".to_string());
+                    }
+                }
+                
                 let repo = self.get_repo().await?;
                 repo.update_last_connected(id).await?;
                 Ok(())
             }
             Err(e) => {
                 let mut active = self.active_connections.write().await;
-                active.insert(id, (driver, ConnectionStatus::Error(e.to_string())));
+                if let Some(conn) = active.get_mut(&id) {
+                    conn.status = ConnectionStatus::Error(e.to_string());
+                }
                 Err(e)
             }
         }
@@ -151,8 +189,8 @@ impl ConnectionUseCase {
 
     pub async fn disconnect(&self, id: Uuid) -> Result<(), DomainError> {
         let mut active = self.active_connections.write().await;
-        if let Some((driver, _)) = active.remove(&id) {
-            driver.disconnect().await?;
+        if let Some(conn) = active.remove(&id) {
+            conn.driver.disconnect().await?;
         }
         Ok(())
     }
@@ -160,16 +198,104 @@ impl ConnectionUseCase {
     pub async fn get_connection_status(&self, id: Uuid) -> ConnectionStatus {
         let active = self.active_connections.read().await;
         active.get(&id)
-            .map(|(_, status)| status.clone())
+            .map(|c| c.status.clone())
             .unwrap_or(ConnectionStatus::Disconnected)
     }
 
     pub async fn get_active_driver(&self, id: Uuid) -> Result<Arc<dyn SqlDriver>, DomainError> {
         let active = self.active_connections.read().await;
         active.get(&id)
-            .filter(|(_, status)| *status == ConnectionStatus::Connected)
-            .map(|(driver, _)| driver.clone())
+            .filter(|c| c.status == ConnectionStatus::Connected)
+            .map(|c| c.driver.clone())
             .ok_or_else(|| DomainError::connection("Connection not active"))
+    }
+    
+    /// Retorna el contexto activo (database, schema) de una conexión
+    pub async fn get_active_context(&self, id: Uuid) -> Option<(Option<String>, Option<String>)> {
+        let active = self.active_connections.read().await;
+        active.get(&id)
+            .map(|c| (c.current_database.clone(), c.current_schema.clone()))
+    }
+
+    /// Cambia la base de datos activa
+    /// Para PostgreSQL/MySQL esto implica reconectar o ejecutar USE (dependiendo de la implementación)
+    /// Aquí optamos por reconectar para garantizar aislamiento completo
+    pub async fn change_database(&self, id: Uuid, database_name: String) -> Result<(), DomainError> {
+        let mut connection = self.get_connection(id).await?;
+        
+        // Verificamos si realmente necesitamos cambiar
+        {
+            let active = self.active_connections.read().await;
+            if let Some(conn) = active.get(&id) {
+                if conn.current_database.as_ref() == Some(&database_name) {
+                    return Ok(());
+                }
+            }
+            // Si no hay conexión activa, permitimos continuar para intentar reconectar
+            // directamente a la nueva base de datos.
+        }
+
+        // Modificamos temporalmente la configuración para conectar a la nueva DB
+        connection.database = Some(database_name.clone());
+        let password = self.credential_store.retrieve(id).await?.unwrap_or_default();
+        let conn_string = self.build_connection_string(&connection, &password);
+        
+        // Creamos nuevo driver y conectamos
+        let new_driver: Arc<dyn SqlDriver> = Arc::from(self.driver_factory.create_new_driver(&connection.engine));
+        
+        // Desconectamos el anterior
+        self.disconnect(id).await?;
+        
+        // Registramos el nuevo (Connecting)
+        {
+            let mut active = self.active_connections.write().await;
+             active.insert(id, ActiveConnection {
+                driver: new_driver.clone(),
+                status: ConnectionStatus::Connecting,
+                current_database: Some(database_name.clone()),
+                current_schema: None, // Reset schema al cambiar DB
+            });
+        }
+        
+        match new_driver.connect(&conn_string).await {
+             Ok(()) => {
+                let mut active = self.active_connections.write().await;
+                if let Some(conn) = active.get_mut(&id) {
+                    conn.status = ConnectionStatus::Connected;
+                    // Reset schema to default if needed
+                    if connection.engine == DatabaseEngine::PostgreSQL {
+                         conn.current_schema = Some("public".to_string());
+                    }
+                }
+                Ok(())
+            }
+            Err(e) => {
+                let mut active = self.active_connections.write().await;
+                if let Some(conn) = active.get_mut(&id) {
+                    conn.status = ConnectionStatus::Error(e.to_string());
+                }
+                Err(e)
+            }
+        }
+    }
+
+    /// Cambia el esquema activo (solo PostgreSQL)
+    pub async fn change_schema(&self, id: Uuid, schema_name: String) -> Result<(), DomainError> {
+        let driver = self.get_active_driver(id).await?;
+        
+        // Esto solo aplica realmente para PostgreSQL
+        if driver.driver_id() == "postgresql" {
+            let query = format!("SET search_path TO \"{}\"", schema_name);
+            driver.execute_statement(&query).await?;
+            
+            // Actualizar estado
+            let mut active = self.active_connections.write().await;
+            if let Some(conn) = active.get_mut(&id) {
+                conn.current_schema = Some(schema_name);
+            }
+        }
+        
+        Ok(())
     }
 
     fn build_connection_string(&self, conn: &Connection, password: &str) -> String {

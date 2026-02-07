@@ -41,6 +41,19 @@
   /* DON'T force display or visibility */
 }
 
+.is-mac html,
+.is-mac body,
+.is-mac #root {
+  pointer-events: auto !important;
+  background-color: #0b0f0c !important;
+}
+.is-mac [style*="backdrop-filter"]:not([style*="backdrop-filter: none"]),
+.is-mac [style*="-webkit-backdrop-filter"]:not([style*="-webkit-backdrop-filter: none"]),
+.is-mac [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* ============================================================================
  * Backdrop Filters - Disable on specific elements only
  * ============================================================================ */

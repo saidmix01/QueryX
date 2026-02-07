@@ -4,6 +4,7 @@ import { CheckCircle2, XCircle, Clock, Plus as PlusIcon } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ResultsTable } from './ResultsTable';
 import type { QueryResult } from '../domain/types';
+import { useConnectionStore } from '../store/connection-store';
 import { useResultPanelsStore } from '../store/result-panels-store';
 
 interface StatementResult {
@@ -35,12 +36,73 @@ export function MultiStatementResults({
   const successCount = results.filter((r) => r.success).length;
   const errorCount = results.filter((r) => !r.success).length;
 
+  const { connections } = useConnectionStore();
+  const connection = connections.find(c => c.id === connectionId);
+  const engine = connection?.engine || 'postgresql';
+
+  // Helper function to detect if query is editable (for insert/update)
+  // Reused logic from ResultsTable indirectly via exports
+ 
+  // Note: For multi-statement simple exports, we might not have full query analysis available 
+  // without parsing each SQL again. For now, we will do basic exports.
+
+  const handleExportCsv = async () => {
+    if (!selectedResult.result) return;
+    const { toCsv } = await import('../utils/export-utils');
+    const { save } = await import('@tauri-apps/api/dialog');
+    const { writeTextFile } = await import('@tauri-apps/api/fs');
+    
+    const csv = toCsv(selectedResult.result);
+    const filePath = await save({
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+      defaultPath: `statement-${selectedIndex + 1}.csv`,
+    });
+    if (!filePath) return;
+    await writeTextFile(filePath as string, csv);
+  };
+
+  const handleExportXlsx = async () => {
+    if (!selectedResult.result) return;
+    const { normalizeRowsForExcel } = await import('../utils/export-utils');
+    const { save } = await import('@tauri-apps/api/dialog');
+    const { exportApi } = await import('../infrastructure/tauri-api');
+
+    const { columns, rows } = normalizeRowsForExcel(selectedResult.result);
+    const filePath = await save({
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+      defaultPath: `statement-${selectedIndex + 1}.xlsx`,
+    });
+    if (!filePath) return;
+    await exportApi.exportXlsx(columns, rows, filePath as string);
+  };
+
+  const handleExportInsert = async () => {
+    if (!selectedResult.result) return;
+    const { toInsertSql } = await import('../utils/export-utils');
+    const { save } = await import('@tauri-apps/api/dialog');
+    const { writeTextFile } = await import('@tauri-apps/api/fs');
+
+    const sql = toInsertSql(selectedResult.result, engine, { schema: null, table: null });
+    const filePath = await save({
+      filters: [{ name: 'SQL', extensions: ['sql'] }],
+      defaultPath: `insert-statement-${selectedIndex + 1}.sql`,
+    });
+    if (!filePath) return;
+    await writeTextFile(filePath as string, sql);
+  };
+
   function MenuActions({
     onModal,
     onPin,
+    onCsv,
+    onXlsx,
+    onInsert,
   }: {
     onModal: () => void;
     onPin: () => void;
+    onCsv: () => void;
+    onXlsx: () => void;
+    onInsert: () => void;
   }) {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement | null>(null);
@@ -77,7 +139,7 @@ export function MultiStatementResults({
         {open && coords && createPortal(
           <div
             ref={menuRef}
-            className="fixed w-36 bg-dark-surface border border-dark-border/40 rounded shadow-xl"
+            className="fixed w-36 bg-dark-surface border border-dark-border/40 rounded shadow-xl pointer-events-auto"
             style={{ left: coords.left, top: coords.top, zIndex: 100000 }}
           >
             <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-dark-hover" onClick={() => { setOpen(false); onModal(); }}>
@@ -85,6 +147,16 @@ export function MultiStatementResults({
             </button>
             <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-dark-hover" onClick={() => { setOpen(false); onPin(); }}>
               Pinear
+            </button>
+            <div className="h-px bg-dark-border/30 my-1" />
+            <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-dark-hover" onClick={() => { setOpen(false); onCsv(); }}>
+              CSV
+            </button>
+            <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-dark-hover" onClick={() => { setOpen(false); onXlsx(); }}>
+              Excel
+            </button>
+            <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-dark-hover" onClick={() => { setOpen(false); onInsert(); }}>
+              INSERT
             </button>
           </div>,
           document.body
@@ -171,8 +243,31 @@ export function MultiStatementResults({
               </span>
               <div className="ml-auto">
                 <MenuActions
-                  onModal={() => useResultPanelsStore.getState().setPanelState(`${tabId}:stmt:${selectedIndex}`, 'modal')}
-                  onPin={() => useResultPanelsStore.getState().setPanelState(`${tabId}:stmt:${selectedIndex}`, 'pinned')}
+                  onModal={() => {
+                    const id = `${tabId}:stmt:${selectedIndex}`;
+                    useResultPanelsStore.getState().ensurePanelForStatement({
+                      id,
+                      query: selectedResult.sql,
+                      connectionId,
+                      result: selectedResult.result,
+                      affectedRows: selectedResult.affected_rows,
+                    });
+                    useResultPanelsStore.getState().setPanelState(id, 'modal');
+                  }}
+                  onPin={() => {
+                    const id = `${tabId}:stmt:${selectedIndex}`;
+                    useResultPanelsStore.getState().ensurePanelForStatement({
+                      id,
+                      query: selectedResult.sql,
+                      connectionId,
+                      result: selectedResult.result,
+                      affectedRows: selectedResult.affected_rows,
+                    });
+                    useResultPanelsStore.getState().setPanelState(id, 'pinned');
+                  }}
+                  onCsv={handleExportCsv}
+                  onXlsx={handleExportXlsx}
+                  onInsert={handleExportInsert}
                 />
               </div>
             </div>
@@ -209,6 +304,7 @@ export function MultiStatementResults({
                   error: null,
                   isExecuting: false,
                 }}
+                hideMenu={true}
               />
             ) : (
               <div className="h-full flex items-center justify-center">

@@ -3,6 +3,7 @@ import { schemaApi, queryApi } from '../infrastructure/tauri-api';
 import { AdminAdapterFactory } from '../infrastructure/admin-adapters';
 import { schemaCatalog } from '../sql-completion/schema-catalog';
 import { DatabaseEngine, CellValue, ConnectionStatus } from '../domain/types';
+import { useConnectionStore } from './connection-store';
 
 // Helper to extract value from CellValue
 const getCellValue = (cell: CellValue | undefined): any => {
@@ -96,50 +97,19 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
     set((state) => {
       const newNodes = { ...state.nodes };
       
-      if (database) {
-        // Conexión con database específica - estructura tradicional
-        const dbNodeId = createNodeId('database', connectionId, database);
-        
-        newNodes[connNodeId] = {
-          id: connNodeId,
-          type: 'connection',
-          name: connectionName,
-          parentId: null,
-          isExpandable: true,
-          isExpanded: false,
-          isLoading: false,
-          isLoaded: true,
-          children: [dbNodeId],
-          metadata: { connectionId, database },
-        };
-
-        newNodes[dbNodeId] = {
-          id: dbNodeId,
-          type: 'database',
-          name: database,
-          parentId: connNodeId,
-          isExpandable: true,
-          isExpanded: false,
-          isLoading: false,
-          isLoaded: false,
-          children: [],
-          metadata: { connectionId, database },
-        };
-      } else {
-        // Conexión sin database - mostrar lista de databases
-        newNodes[connNodeId] = {
-          id: connNodeId,
-          type: 'connection',
-          name: connectionName,
-          parentId: null,
-          isExpandable: true,
-          isExpanded: false,
-          isLoading: false,
-          isLoaded: false, // Necesita cargar la lista de databases
-          children: [],
-          metadata: { connectionId, database: null },
-        };
-      }
+      // Siempre inicializamos la conexión como no cargada para forzar listado de DBs
+      newNodes[connNodeId] = {
+        id: connNodeId,
+        type: 'connection',
+        name: connectionName,
+        parentId: null,
+        isExpandable: true,
+        isExpanded: false,
+        isLoading: false,
+        isLoaded: false, 
+        children: [],
+        metadata: { connectionId, database: database || null },
+      };
 
       const rootNodes = state.rootNodes.includes(connNodeId)
         ? state.rootNodes
@@ -165,7 +135,6 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
       connections.forEach(conn => {
         const nodeId = createNodeId('connection', conn.id);
         const rawStatus = statuses[conn.id] || 'Disconnected';
-        // Normalize status for metadata (string) to avoid object issues in UI
         const status = typeof rawStatus === 'string' ? rawStatus : 'Error'; 
         
         const isConnected = status === 'Connected';
@@ -193,29 +162,10 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
              };
           }
 
-          // Handle Disconnected -> Connected transition structure
-          if (isConnected && existingNode.children.length === 0 && conn.database) {
-              // If it's connected but missing children (and has a default DB), initialize structure
-              const dbNodeId = createNodeId('database', conn.id, conn.database);
-              newNodes[nodeId].children = [dbNodeId];
-              newNodes[nodeId].isLoaded = true;
-              
-              if (!newNodes[dbNodeId]) {
-                newNodes[dbNodeId] = {
-                  id: dbNodeId,
-                  type: 'database',
-                  name: conn.database,
-                  parentId: nodeId,
-                  isExpandable: true,
-                  isExpanded: false,
-                  isLoading: false,
-                  isLoaded: false,
-                  children: [],
-                  metadata: { connectionId: conn.id, database: conn.database, engine: conn.engine },
-                };
-              }
-              stateChanged = true;
-          } else if (!isConnected && existingNode.children.length > 0) {
+          // Si pasamos a Connected y no está cargado, no hacemos nada especial aquí.
+          // Dejamos que el usuario expanda el nodo, lo cual disparará loadChildren -> listDatabases.
+          // Si pasamos a Disconnected, limpiamos.
+          if (!isConnected && existingNode.children.length > 0) {
               // Connected -> Disconnected: Clear children and collapse
               newNodes[nodeId].children = [];
               newNodes[nodeId].isExpanded = false;
@@ -225,8 +175,6 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
         } else {
           stateChanged = true;
           // Create new node
-          const shouldBeLoaded = isConnected && !!conn.database;
-          
           newNodes[nodeId] = {
             id: nodeId,
             type: 'connection',
@@ -235,27 +183,10 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
             isExpandable: true,
             isExpanded: false,
             isLoading: false,
-            isLoaded: shouldBeLoaded,
+            isLoaded: false, // Siempre false al inicio
             children: [],
             metadata,
           };
-
-          if (isConnected && conn.database) {
-             const dbNodeId = createNodeId('database', conn.id, conn.database);
-             newNodes[nodeId].children = [dbNodeId];
-             newNodes[dbNodeId] = {
-                id: dbNodeId,
-                type: 'database',
-                name: conn.database,
-                parentId: nodeId,
-                isExpandable: true,
-                isExpanded: false,
-                isLoading: false,
-                isLoaded: false,
-                children: [],
-                metadata: { connectionId: conn.id, database: conn.database, engine: conn.engine },
-             };
-          }
         }
       });
 
@@ -324,10 +255,23 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
           await toggleNode(childId, connectionId);
         }
       };
-
-      if (updatedNode.type === 'connection' && updatedNode.children.length === 1) {
-        // Connection -> Single Database
-        await expandChild(updatedNode.children[0]);
+      
+      // Auto-expand database if it matches the active one
+      if (updatedNode.type === 'connection') {
+          // Usar activeContext para determinar qué DB expandir, en lugar de la configuración estática
+          const activeContext = useConnectionStore.getState().activeContexts[connectionId];
+          const activeDb = activeContext?.database;
+          
+          if (activeDb) {
+              const dbChildId = updatedNode.children.find(id => {
+                  const child = get().nodes[id];
+                  // Comparación insensible a mayúsculas
+                  return child && child.name.toLowerCase() === activeDb.toLowerCase();
+              });
+              if (dbChildId) {
+                  await expandChild(dbChildId);
+              }
+          }
       } else if (updatedNode.type === 'database') {
         // Database -> 'public' Schema or Single Schema
         const children = updatedNode.children.map(id => get().nodes[id]).filter(Boolean);
@@ -381,7 +325,7 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
 
       switch (node.type) {
         case 'connection': {
-          // Cargar lista de databases cuando no hay database específica
+          // SIEMPRE cargamos la lista de databases
           console.log('[Explorer] Loading databases for connection:', { connectionId });
           const databases = await schemaApi.listDatabases(connectionId);
           console.log('[Explorer] Databases loaded:', databases);

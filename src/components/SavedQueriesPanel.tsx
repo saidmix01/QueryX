@@ -3,6 +3,7 @@ import { useSavedQueryStore } from '../store/saved-query-store';
 import { useConnectionStore } from '../store/connection-store';
 import { useQueryStore } from '../store/query-store';
 import type { SavedQuery } from '../domain/saved-query-types';
+import { normalizeError } from '../utils/global-error-handler';
 
 export function SavedQueriesPanel() {
   const { activeConnectionId } = useConnectionStore();
@@ -58,7 +59,7 @@ export function SavedQueriesPanel() {
       setNewQueryName('');
       setNewQueryDescription('');
     } catch (e) {
-      alert('Error al guardar: ' + String(e));
+      alert('Error al guardar: ' + normalizeError(e));
     }
   };
 

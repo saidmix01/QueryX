@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Professional SQL Database Manager"
 authors = ["SQLForge Team"]
 license = "MIT"
-repository = ""
+repository = "https://github.com/saidmix01/QueryX"
 edition = "2021"
 
 [build-dependencies]

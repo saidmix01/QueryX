@@ -42,6 +42,15 @@ export const connectionApi = {
   
   getStatus: (id: string) => 
     invoke<ConnectionStatus>('get_connection_status', { id }),
+
+  changeDatabase: (id: string, database: string) =>
+    invoke<void>('change_database', { id, database }),
+
+  changeSchema: (id: string, schema: string) =>
+    invoke<void>('change_schema', { id, schema }),
+
+  getActiveContext: (id: string) =>
+    invoke<[string | null, string | null]>('get_active_context', { id }),
 };
 
 // Query API
@@ -76,6 +85,19 @@ export const queryApi = {
 
   cancel: (connectionId: string) =>
     invoke<void>('cancel_query', { connectionId }),
+
+  insertRow: (
+    connectionId: string,
+    schema: string | null,
+    table: string,
+    values: Record<string, any>
+  ) =>
+    invoke<QueryResult>('insert_row', {
+      connectionId,
+      schema,
+      table,
+      values,
+    }),
 };
 
 // Schema API

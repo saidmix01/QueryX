@@ -18,6 +18,11 @@ interface UIState {
     onConfirm: () => void;
   } | null;
   isAboutModalOpen: boolean;
+  destructiveOperationModal: {
+    operation: import('../domain/editable-result-types').DestructiveOperation;
+    onConfirm: () => Promise<void>;
+    onCancel: () => void;
+  } | null;
 
   // Actions
   setTheme: (theme: Theme) => void;
@@ -34,6 +39,12 @@ interface UIState {
   }) => void;
   closeConfirmDialog: () => void;
   setAboutModalOpen: (open: boolean) => void;
+  showDestructiveOperation: (data: {
+    operation: import('../domain/editable-result-types').DestructiveOperation;
+    onConfirm: () => Promise<void>;
+    onCancel: () => void;
+  }) => void;
+  closeDestructiveOperation: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -47,6 +58,7 @@ export const useUIStore = create<UIState>()(
       isConfirmDialogOpen: false,
       confirmDialogConfig: null,
       isAboutModalOpen: false,
+      destructiveOperationModal: null,
 
       setTheme: (theme) => {
         document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -66,7 +78,7 @@ export const useUIStore = create<UIState>()(
       openConnectionModal: (connectionId) =>
         set({
           isConnectionModalOpen: true,
-          editingConnectionId: connectionId ?? null,
+          editingConnectionId: typeof connectionId === 'string' ? connectionId : null,
         }),
 
       closeConnectionModal: () =>
@@ -88,6 +100,8 @@ export const useUIStore = create<UIState>()(
         }),
 
       setAboutModalOpen: (open) => set({ isAboutModalOpen: open }),
+      showDestructiveOperation: (data) => set({ destructiveOperationModal: data }),
+      closeDestructiveOperation: () => set({ destructiveOperationModal: null }),
     }),
     {
       name: 'sqlforge-ui',

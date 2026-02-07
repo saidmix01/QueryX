@@ -94,7 +94,7 @@
         "maximized": true,
         "transparent": false,
         "skipTaskbar": false,
-        "visible": true,
+        "visible": false,
         "alwaysOnTop": false,
         "focus": true,
         "center": false

@@ -36,25 +36,24 @@ fn main() {
             if is_wayland { "Wayland" } else { "X11" });
         
         // ========================================================================
-        // WebKitGTK Environment Variables - Conservative Approach
+        // WebKitGTK Environment Variables - Safe Mode
         // ========================================================================
         // NOTE: WEBKIT_DISABLE_COMPOSITING_MODE can cause black screens
-        // Only disable DMA-BUF renderer which is known to cause issues
+        // So we keep it DISABLED (commented out) unless strictly necessary
+        // std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        
+        // Disable DMA-BUF renderer which is known to cause issues
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         
-        // Don't disable compositing mode as it can cause black screens
-        // Don't force software rendering as it can cause black screens
-        // Only disable problematic GPU features, not all rendering
-        
         // ========================================================================
-        // EGL/DRI3 Environment Variables - Conservative Approach
+        // EGL/DRI3 Environment Variables - Safe Mode
         // ========================================================================
-        // NOTE: LIBGL_ALWAYS_SOFTWARE can cause black screens
-        // Only set Mesa version overrides if needed, don't force software rendering
-        // std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1"); // DISABLED - causes black screens
+        // Force software rendering for EGL if hardware acceleration fails
+        // This is safer than risking a black screen with incompatible drivers
+        std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
         
-        // Don't force software Mesa driver as it can cause black screens
-        // Let the system use hardware acceleration if available
+        // Also force WebKit to use software rendering if possible
+        std::env::set_var("WEBKIT_FORCE_SANDBOX", "0");
         
         // ========================================================================
         // GTK/WebKitGTK Specific Fixes
@@ -63,9 +62,8 @@ fn main() {
         std::env::set_var("GTK_CSD", "0");
         
         // Force GTK to use X11 backend explicitly (more stable than auto-detection)
-        if !is_wayland {
-            std::env::set_var("GDK_BACKEND", "x11");
-        }
+        // Even on Wayland, we prefer XWayland for stability with Tauri v1
+        std::env::set_var("GDK_BACKEND", "x11");
         
         // Disable GTK overlay scrolling (can cause rendering artifacts)
         std::env::set_var("GTK_OVERLAY_SCROLLING", "0");
@@ -160,6 +158,32 @@ fn main() {
                 }
             }
 
+            // ====================================================================
+            // GENERAL WINDOW SHOW (Non-Linux or General Fallback)
+            // ====================================================================
+            // Since we set visible: false in tauri.conf.json, we must explicitly
+            // show the window on all platforms if it hasn't been shown yet.
+            
+            // For Windows: Disable decorations for custom title bar
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(window) = app.handle().get_window("main") {
+                    let _ = window.set_decorations(false);
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
+            // For MacOS and others (excluding Linux which is handled above, and Windows handled above)
+            #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
+            {
+                if let Some(window) = app.handle().get_window("main") {
+                    let _ = window.set_decorations(true);
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
             let data_dir = app_handle
                 .path_resolver()
                 .app_data_dir()
@@ -231,8 +255,12 @@ fn main() {
             connect,
             disconnect,
             get_connection_status,
+            change_database,
+            change_schema,
+            get_active_context,
             // Query commands
             execute_query,
+            insert_row,
             execute_statement,
             execute_multi_statement,
             execute_in_transaction,

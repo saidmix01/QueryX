@@ -7,50 +7,77 @@ import { useConnectionStore } from '../store/connection-store';
 import { isLinux } from '../utils/platform-fixes';
 
 export function TitleBar() {
+  const ua = navigator.userAgent.toLowerCase();
+  const root = document.documentElement;
+  const uaMac = ua.includes('mac os') || ua.includes('macintosh') || root.classList.contains('is-mac');
+  const uaWin = ua.includes('windows');
+  const uaLin = ua.includes('linux') || root.classList.contains('is-linux');
+  const initialPlatform = uaMac ? 'darwin' : uaWin ? 'win32' : uaLin ? 'linux' : '';
   const [isMaximized, setIsMaximized] = useState(true);
-  const [platform, setPlatform] = useState<string>('');
-  const [isLinuxPlatform, setIsLinuxPlatform] = useState(false);
+  const [platform, setPlatform] = useState<string>(initialPlatform);
+  const [isLinuxPlatform, setIsLinuxPlatform] = useState(uaLin);
   const setAboutModalOpen = useUIStore((s) => s.setAboutModalOpen);
   const { activeConnectionId, connections } = useConnectionStore();
   const activeConnection = connections.find((c) => c.id === activeConnectionId);
+  const isTauri = typeof (window as any).__TAURI_IPC__ === 'function';
 
   useEffect(() => {
     // Detectar plataforma
-    os.platform().then(setPlatform).catch(() => setPlatform('unknown'));
+    if (isTauri) {
+      os.platform().then(setPlatform).catch(() => setPlatform('unknown'));
+    } else {
+      const ua = navigator.userAgent.toLowerCase();
+      if (ua.includes('mac os') || ua.includes('macintosh')) setPlatform('darwin');
+      else if (ua.includes('windows')) setPlatform('win32');
+      else if (ua.includes('linux')) setPlatform('linux');
+      else setPlatform('unknown');
+    }
     
     // Detectar si es Linux (para ocultar TitleBar personalizado)
     isLinux().then(setIsLinuxPlatform).catch(() => setIsLinuxPlatform(false));
 
     // Escuchar cambios en el estado de maximizado
-    const unlisten = appWindow.onResized(async () => {
-      const maximized = await appWindow.isMaximized();
-      setIsMaximized(maximized);
-    });
-
-    // Verificar estado inicial
-    appWindow.isMaximized().then(setIsMaximized);
+    let unlistenPromise: Promise<() => void> | null = null;
+    if (isTauri) {
+      unlistenPromise = appWindow.onResized(async () => {
+        const maximized = await appWindow.isMaximized();
+        setIsMaximized(maximized);
+      });
+      // Verificar estado inicial
+      appWindow.isMaximized().then(setIsMaximized).catch(() => {});
+    }
 
     return () => {
-      unlisten.then((fn) => fn());
+      if (unlistenPromise) {
+        unlistenPromise.then((fn) => fn()).catch(() => {});
+      }
     };
-  }, []);
+  }, [isTauri]);
 
-  const handleMinimize = () => appWindow.minimize();
+  const handleMinimize = () => {
+    if (isTauri) appWindow.minimize();
+  };
   
   const handleMaximize = async () => {
     if (isMaximized) {
-      await appWindow.unmaximize();
+      if (isTauri) await appWindow.unmaximize();
     } else {
-      await appWindow.maximize();
+      if (isTauri) await appWindow.maximize();
     }
   };
 
-  const handleClose = () => appWindow.close();
+  const handleClose = () => {
+    if (isTauri) appWindow.close();
+  };
 
   const isMacOS = platform === 'darwin';
 
   // En Linux, no mostrar TitleBar personalizado (usar barra del sistema)
   if (isLinuxPlatform) {
+    return null;
+  }
+  // En macOS, usar la barra nativa (no mostrar personalizada)
+  if (isMacOS) {
     return null;
   }
 
@@ -59,6 +86,7 @@ export function TitleBar() {
     <div className="flex items-center h-full">
       {/* Minimizar */}
       <button
+        data-tauri-drag-region="false"
         onClick={handleMinimize}
         className="h-full w-11 flex items-center justify-center hover:bg-dark-hover transition-colors group"
         title="Minimizar"
@@ -68,6 +96,7 @@ export function TitleBar() {
 
       {/* Maximizar/Restaurar */}
       <button
+        data-tauri-drag-region="false"
         onClick={handleMaximize}
         className="h-full w-11 flex items-center justify-center hover:bg-dark-hover transition-colors group"
         title={isMaximized ? 'Restaurar' : 'Maximizar'}
@@ -81,6 +110,7 @@ export function TitleBar() {
 
       {/* Cerrar */}
       <button
+        data-tauri-drag-region="false"
         onClick={handleClose}
         className="h-full w-11 flex items-center justify-center hover:bg-red-600 transition-colors group"
         title="Cerrar"
@@ -95,13 +125,7 @@ export function TitleBar() {
       data-tauri-drag-region
       className="h-9 bg-dark-surface/95 backdrop-blur-sm border-b border-dark-border/50 flex items-center select-none"
     >
-      {/* En macOS, los controles van a la izquierda (aunque usamos custom, mantenemos espacio) */}
-      {isMacOS && (
-        <>
-          <WindowControls />
-          <div className="h-4 w-px bg-dark-border/30" />
-        </>
-      )}
+      {/* Espaciador izquierdo (sin controles en macOS) */}
 
       {/* Logo y nombre - área arrastrable */}
       <div data-tauri-drag-region className="flex items-center gap-2 px-3 h-full">
@@ -133,6 +157,7 @@ export function TitleBar() {
 
       {/* Botón Acerca de */}
       <button
+        data-tauri-drag-region="false"
         onClick={() => setAboutModalOpen(true)}
         className="h-full px-3 flex items-center justify-center hover:bg-dark-hover/50 transition-colors group"
         title="Acerca de QueryX (F1)"

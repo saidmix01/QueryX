@@ -72,6 +72,7 @@ pub struct Connection {
     pub ssl: SslConfig,
     pub ssh_tunnel: Option<SshTunnelConfig>,
     pub color: Option<String>,
+    pub read_only: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_connected_at: Option<DateTime<Utc>>,
@@ -92,6 +93,7 @@ impl Connection {
             ssl: SslConfig::default(),
             ssh_tunnel: None,
             color: None,
+            read_only: false,
             created_at: now,
             updated_at: now,
             last_connected_at: None,
@@ -179,6 +181,7 @@ pub struct CreateConnectionDto {
     pub file_path: Option<String>,
     pub ssl: Option<SslConfig>,
     pub color: Option<String>,
+    pub read_only: Option<bool>,
 }
 
 /// DTO para actualizar conexiones
@@ -192,6 +195,7 @@ pub struct UpdateConnectionDto {
     pub password: Option<String>,
     pub ssl: Option<SslConfig>,
     pub color: Option<String>,
+    pub read_only: Option<bool>,
 }
 
 /// Estado de una conexión activa

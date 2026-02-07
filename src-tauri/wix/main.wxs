@@ -46,7 +46,7 @@
         <Media Id="1" Cabinet="app.cab" EmbedCab="yes" />
 
 
-        <Icon Id="ProductIcon" SourceFile="C:\dev\QueryX\QueryX\src-tauri\target\release\resources\icon.ico"/>
+        <Icon Id="ProductIcon" SourceFile="C:\Users\Janus\Documents\SAID\Queryx\QueryX\src-tauri\target\release\resources\icon.ico"/>
         <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
         <Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />      <!-- Remove repair -->
         <SetProperty Id="ARPNOMODIFY" Value="1" After="InstallValidate" Sequence="execute"/>
@@ -105,7 +105,7 @@
                 </RegistryKey>
             </Component>
             <Component Id="Path" Guid="5d6514c2-afce-5aba-9f48-a0a1cd288907" Win64="$(var.Win64)">
-                <File Id="Path" Source="C:\dev\QueryX\QueryX\src-tauri\target\release\QueryX.exe" KeyPath="yes" Checksum="yes"/>
+                <File Id="Path" Source="C:\Users\Janus\Documents\SAID\Queryx\QueryX\src-tauri\target\release\QueryX.exe" KeyPath="yes" Checksum="yes"/>
             </Component>
             
             <Component Id="CMP_UninstallShortcut" Guid="*">

@@ -28,7 +28,18 @@ impl FileConnectionRepository {
 
         let connections = if file_path.exists() {
             let content = fs::read_to_string(&file_path).await?;
-            serde_json::from_str(&content).unwrap_or_default()
+            match serde_json::from_str::<Vec<Connection>>(&content) {
+                Ok(c) => c,
+                Err(_) => {
+                    let bak_path = file_path.with_extension("bak");
+                    if bak_path.exists() {
+                        let bak_content = fs::read_to_string(&bak_path).await?;
+                        serde_json::from_str::<Vec<Connection>>(&bak_content).unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    }
+                }
+            }
         } else {
             Vec::new()
         };
@@ -42,7 +53,13 @@ impl FileConnectionRepository {
     async fn save(&self) -> Result<(), DomainError> {
         let connections = self.connections.read().await;
         let content = serde_json::to_string_pretty(&*connections)?;
-        fs::write(&self.file_path, content).await?;
+        let tmp_path = self.file_path.with_extension("tmp");
+        fs::write(&tmp_path, content).await?;
+        if self.file_path.exists() {
+            let bak_path = self.file_path.with_extension("bak");
+            let _ = fs::rename(&self.file_path, &bak_path).await;
+        }
+        fs::rename(&tmp_path, &self.file_path).await?;
         Ok(())
     }
 }
@@ -91,6 +108,7 @@ impl ConnectionRepository for FileConnectionRepository {
             ssl: dto.ssl.unwrap_or_default(),
             ssh_tunnel: None,
             color: dto.color,
+            read_only: dto.read_only.unwrap_or(false),
             created_at: now,
             updated_at: now,
             last_connected_at: None,
@@ -120,6 +138,7 @@ impl ConnectionRepository for FileConnectionRepository {
         if let Some(username) = dto.username { conn.username = Some(username); }
         if let Some(ssl) = dto.ssl { conn.ssl = ssl; }
         if let Some(color) = dto.color { conn.color = Some(color); }
+        if let Some(ro) = dto.read_only { conn.read_only = ro; }
         conn.updated_at = Utc::now();
 
         let updated = conn.clone();
@@ -167,6 +186,7 @@ impl ConnectionRepository for FileConnectionRepository {
             file_path: original.file_path,
             ssl: Some(original.ssl),
             color: original.color,
+            read_only: Some(original.read_only),
         };
         self.create(dto).await
     }

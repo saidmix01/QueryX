@@ -69,7 +69,7 @@ function formatTableName(schema: string | undefined, table: string, engine: Data
   return quotedTable;
 }
 
-function NodeIcon({ type, isExpanded, metadata }: { type: TreeNodeType; isExpanded: boolean; metadata?: Record<string, unknown> }): JSX.Element {
+function NodeIcon({ type, isExpanded, metadata, isActiveContext }: { type: TreeNodeType; isExpanded: boolean; metadata?: Record<string, unknown>; isActiveContext?: boolean }): JSX.Element {
   const iconClass = 'w-4 h-4 flex-shrink-0';
   
   switch (type) {
@@ -94,7 +94,7 @@ function NodeIcon({ type, isExpanded, metadata }: { type: TreeNodeType; isExpand
         </div>
       );
     case 'database':
-      return <Database className={clsx(iconClass, 'text-blue-400')} />;
+      return <Database className={clsx(iconClass, isActiveContext ? 'text-matrix-400 font-bold' : 'text-blue-400')} />;
     case 'schema':
       return isExpanded 
         ? <FolderOpen className={clsx(iconClass, 'text-yellow-400')} />
@@ -145,6 +145,7 @@ const getNodeLabel = (node: TreeNode): string => {
 interface TreeNodeRowProps {
   flatNode: FlattenedNode;
   isSelected: boolean;
+  isActiveContext?: boolean;
   onToggle: () => void;
   onSelect: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
@@ -154,6 +155,7 @@ interface TreeNodeRowProps {
 function TreeNodeRow({
   flatNode,
   isSelected,
+  isActiveContext,
   onToggle,
   onSelect,
   onContextMenu,
@@ -204,14 +206,16 @@ function TreeNodeRow({
       )}
 
       {/* Icon */}
-      <NodeIcon type={node.type} isExpanded={node.isExpanded} metadata={node.metadata} />
+      <NodeIcon type={node.type} isExpanded={node.isExpanded} metadata={node.metadata} isActiveContext={isActiveContext} />
 
       {/* Label */}
       <span className={clsx(
         'text-sm truncate flex-1',
-        node.type === 'column' && (node.metadata?.is_primary_key as boolean) && 'text-yellow-500'
+        node.type === 'column' && (node.metadata?.is_primary_key as boolean) && 'text-yellow-500',
+        isActiveContext && 'font-bold text-matrix-400'
       )}>
         {getNodeLabel(node)}
+        {isActiveContext && <span className="ml-2 text-xs bg-matrix-500/20 text-matrix-400 px-1 rounded">Active</span>}
       </span>
 
       {/* Nullable indicator for columns */}
@@ -243,15 +247,15 @@ export function DatabaseTree() {
   const { 
     connections, 
     activeConnectionId, 
-    connectionStatuses, 
+    connectionStatuses,
+    activeContexts, 
     connect, 
     disconnect, 
     deleteConnection, 
-    setActiveConnection,
-    updateConnection
+    setActiveConnection
   } = useConnectionStore();
   
-  const { addTab, setActiveTab } = useQueryStore();
+  const { addTab, setActiveTab, executeQuery } = useQueryStore();
   const { setSelectedSchema, setSelectedDatabase, clear: clearSchema } = useSchemaStore();
   const { openConnectionModal } = useUIStore();
 
@@ -331,12 +335,22 @@ export function DatabaseTree() {
         
         if (node.type === 'database') {
           const db = node.metadata?.database as string;
-          const conn = connections.find(c => c.id === connectionId);
-          if (conn && db) {
-            await updateConnection(connectionId, { database: db });
-            await connect(connectionId);
-            setSelectedDatabase(connectionId, db);
-            await ensureDefaultSchemaInitialized({ ...conn, database: db } as Connection, { force: true });
+          if (db) {
+            try {
+              // Use changeDatabase instead of updateConnection to switch context at runtime
+              const { changeDatabase } = useConnectionStore.getState();
+              await changeDatabase(connectionId, db);
+              setSelectedDatabase(connectionId, db);
+              
+              // Only ensure schema init if we successfully switched
+              const conn = connections.find(c => c.id === connectionId);
+              if (conn) {
+                await ensureDefaultSchemaInitialized({ ...conn, database: db } as Connection, { force: true });
+              }
+            } catch (e) {
+              console.error('Failed to change database context:', e);
+              // Optionally show a toast error here
+            }
           }
         }
         
@@ -377,9 +391,10 @@ export function DatabaseTree() {
           connectionId,
         });
         setActiveTab(tabId);
+        executeQuery(tabId, query);
       }
     },
-    [addTab, setActiveTab, connections]
+    [addTab, setActiveTab, executeQuery, connections]
   );
 
   const handleContextMenu = useCallback(
@@ -762,6 +777,14 @@ export function DatabaseTree() {
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const flatNode = flattenedNodes[virtualRow.index];
+            const connectionId = flatNode.node.metadata?.connectionId as string;
+            const context = activeContexts[connectionId];
+            
+            // Check if this database node is the active one
+            // We use case-insensitive comparison for better UX as some DBs return lowercase
+            const isActiveContext = 
+                flatNode.node.type === 'database' && 
+                context?.database?.toLowerCase() === flatNode.node.name.toLowerCase();
 
             return (
               <div
@@ -778,6 +801,7 @@ export function DatabaseTree() {
                 <TreeNodeRow
                   flatNode={flatNode}
                   isSelected={selectedNodeId === flatNode.node.id}
+                  isActiveContext={isActiveContext}
                   onToggle={() => handleToggle(flatNode.node.id)}
                   onSelect={() => selectNode(flatNode.node.id)}
                   onContextMenu={(e) => handleContextMenu(e, flatNode.node)}

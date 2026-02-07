@@ -38,11 +38,23 @@ impl FileWorkspaceRepository {
             let content = fs::read_to_string(&self.storage_path).await.map_err(|e| {
                 DomainError::internal(format!("Failed to read workspaces: {}", e))
             })?;
-
-            let storage: WorkspaceStorage = serde_json::from_str(&content).map_err(|e| {
-                DomainError::internal(format!("Failed to parse workspaces: {}", e))
-            })?;
-
+            let parsed = serde_json::from_str::<WorkspaceStorage>(&content);
+            let storage = match parsed {
+                Ok(s) => s,
+                Err(_) => {
+                    let bak_path = self.storage_path.with_extension("bak");
+                    if bak_path.exists() {
+                        let bak_content = fs::read_to_string(&bak_path).await.map_err(|e| {
+                            DomainError::internal(format!("Failed to read workspaces backup: {}", e))
+                        })?;
+                        serde_json::from_str::<WorkspaceStorage>(&bak_content).map_err(|e| {
+                            DomainError::internal(format!("Failed to parse workspaces backup: {}", e))
+                        })?
+                    } else {
+                        WorkspaceStorage::default()
+                    }
+                }
+            };
             *self.cache.write().await = storage;
         }
 
@@ -55,8 +67,16 @@ impl FileWorkspaceRepository {
             DomainError::internal(format!("Failed to serialize workspaces: {}", e))
         })?;
 
-        fs::write(&self.storage_path, content).await.map_err(|e| {
-            DomainError::internal(format!("Failed to write workspaces: {}", e))
+        let tmp_path = self.storage_path.with_extension("tmp");
+        fs::write(&tmp_path, content).await.map_err(|e| {
+            DomainError::internal(format!("Failed to write temp workspaces: {}", e))
+        })?;
+        if self.storage_path.exists() {
+            let bak_path = self.storage_path.with_extension("bak");
+            let _ = fs::rename(&self.storage_path, &bak_path).await;
+        }
+        fs::rename(&tmp_path, &self.storage_path).await.map_err(|e| {
+            DomainError::internal(format!("Failed to commit workspaces: {}", e))
         })?;
 
         Ok(())

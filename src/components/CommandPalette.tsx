@@ -21,7 +21,7 @@ export function CommandPalette() {
     selectPrevious,
   } = useCommandPaletteStore();
 
-  const { activeTabId, updateQuery } = useQueryStore();
+  const { activeTabId, updateQuery, addTab, setActiveTab, executeQuery } = useQueryStore();
   const { connections, activeConnectionId } = useConnectionStore();
   const { queries: savedQueries, loadQueries } = useSavedQueryStore();
   const activeConnection = connections.find((c) => c.id === activeConnectionId);
@@ -161,19 +161,30 @@ export function CommandPalette() {
 
   const handleSelect = useCallback(
     (item: CommandPaletteItem) => {
-      if (!activeTabId) return;
-
       if (item.type === 'saved-query' && item.savedQuery) {
-        updateQuery(activeTabId, item.savedQuery.sql);
+        if (activeTabId) {
+          updateQuery(activeTabId, item.savedQuery.sql);
+        } else {
+          const tabId = addTab({
+            title: item.name,
+            query: item.savedQuery.sql,
+            connectionId: activeConnectionId || '',
+          });
+          setActiveTab(tabId);
+        }
       } else {
-        // Insertar SELECT * FROM en el editor
         const sql = `SELECT * FROM ${formatFullName(item.schema, item.name)} LIMIT 100`;
-        updateQuery(activeTabId, sql);
+        const tabId = addTab({
+          title: item.name,
+          query: sql,
+          connectionId: activeConnectionId || '',
+        });
+        setActiveTab(tabId);
+        executeQuery(tabId, sql);
       }
-      
       close();
     },
-    [activeTabId, updateQuery, close, formatFullName]
+    [activeTabId, updateQuery, addTab, setActiveTab, executeQuery, close, formatFullName, activeConnectionId]
   );
 
   const handleKeyDown = useCallback(

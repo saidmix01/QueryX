@@ -18,6 +18,7 @@ import { type } from '@tauri-apps/api/os';
 import '../linux-fix.css';
 
 let isLinuxCache: boolean | null = null;
+let isMacCache: boolean | null = null;
 
 /**
  * Synchronous heuristic check for immediate application
@@ -26,6 +27,11 @@ let isLinuxCache: boolean | null = null;
 const isLinuxUserAgent = (): boolean => {
   const ua = navigator.userAgent.toLowerCase();
   return ua.includes('linux') && !ua.includes('android');
+};
+
+const isMacUserAgent = (): boolean => {
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.includes('mac os') || ua.includes('macintosh');
 };
 
 /**
@@ -55,6 +61,17 @@ export const isLinux = async (): Promise<boolean> => {
   }
   
   return isLinuxCache || false;
+};
+
+export const isMac = async (): Promise<boolean> => {
+  if (isMacCache !== null) return isMacCache;
+  try {
+    const osType = await type();
+    isMacCache = osType === 'Darwin';
+  } catch {
+    isMacCache = isMacUserAgent();
+  }
+  return isMacCache || false;
 };
 
 /**
@@ -241,4 +258,42 @@ export const applyLinuxFixes = async (): Promise<void> => {
       }
     }
   }
+};
+
+export const applyMacFixes = async (): Promise<void> => {
+  const confirmMac = await isMac();
+  if (!confirmMac) return;
+  document.documentElement.classList.add('is-mac');
+  document.body.classList.add('is-mac');
+  document.documentElement.style.pointerEvents = 'auto';
+  document.body.style.pointerEvents = 'auto';
+  document.documentElement.style.backgroundColor = '#0b0f0c';
+  document.body.style.backgroundColor = '#0b0f0c';
+  const root = document.getElementById('root');
+  if (root) root.style.pointerEvents = 'auto';
+  const scan = () => {
+    const allDivs = document.querySelectorAll('div');
+    allDivs.forEach((el) => {
+      const style = window.getComputedStyle(el);
+      const htmlEl = el as HTMLElement;
+      const hasAnim =
+        htmlEl.className.includes('animate-') ||
+        htmlEl.className.includes('framer-') ||
+        htmlEl.getAttribute('data-framer-name') !== null ||
+        htmlEl.getAttribute('data-framer-component') !== null ||
+        htmlEl.getAttribute('data-framer-appear-id') !== null ||
+        htmlEl.style.transition !== '' ||
+        htmlEl.style.animation !== '';
+      if (
+        style.position === 'fixed' &&
+        style.opacity === '0' &&
+        parseInt(style.zIndex || '0') > 50 &&
+        !hasAnim
+      ) {
+        htmlEl.style.pointerEvents = 'none';
+      }
+    });
+  };
+  setTimeout(scan, 0);
+  setTimeout(scan, 500);
 };

@@ -18,13 +18,27 @@ export function DestructiveOperationModal({
   const [isExecuting, setIsExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizeError = (e: unknown): string => {
+    if (typeof e === 'string') return e;
+    if (e && typeof e === 'object') {
+      if ('message' in (e as any)) return String((e as any).message);
+      if ('error' in (e as any)) return String((e as any).error);
+      try {
+        return JSON.stringify(e);
+      } catch {
+        return String(e);
+      }
+    }
+    return 'Unknown error';
+  };
+
   const handleConfirm = async () => {
     setIsExecuting(true);
     setError(null);
     try {
       await onConfirm();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(normalizeError(e));
       setIsExecuting(false);
     }
   };
@@ -52,7 +66,7 @@ export function DestructiveOperationModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[11050] p-4"
         onClick={onCancel}
       >
         <motion.div

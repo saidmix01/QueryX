@@ -40,6 +40,14 @@ pub trait SqlDriver: Send + Sync {
         page_size: u32,
     ) -> Result<QueryResult, DomainError>;
 
+    /// Inserta una fila en la tabla
+    async fn insert_row(
+        &self,
+        schema: Option<&str>,
+        table: &str,
+        values: std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<QueryResult, DomainError>;
+
     /// Ejecuta una query de modificación (INSERT, UPDATE, DELETE)
     async fn execute_statement(&self, statement: &str) -> Result<u64, DomainError>;
 

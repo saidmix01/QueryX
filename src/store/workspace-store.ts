@@ -4,6 +4,8 @@ import { workspaceApi } from '../infrastructure/tauri-api';
 import { useQueryStore } from './query-store';
 import { debounce } from '../utils/debounce';
 
+let workspaceAutoSaveInitialized = false;
+
 interface WorkspaceStoreState {
   isRestoring: boolean;
   lastSaved: Record<string, Date>;
@@ -95,6 +97,10 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
 
 // Auto-save cuando cambian las pestañas o el contenido
 export const setupWorkspaceAutoSave = () => {
+  if (workspaceAutoSaveInitialized) {
+    return;
+  }
+  workspaceAutoSaveInitialized = true;
   let previousState: string | null = null;
 
   useQueryStore.subscribe((state) => {

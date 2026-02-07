@@ -6,6 +6,7 @@ import { useQueryStore } from '../store/query-store';
 import { useQueryBuilderStore } from '../store/query-builder-store';
 import { useSqlCompletion } from '../sql-completion/use-sql-completion';
 import { parseMultipleStatements, findStatementAtCursor } from '../utils/sql-parser';
+import { classifyRisk, riskColor } from '../utils/sql-risk';
 import { useConnectionStore } from '../store/connection-store';
 import { schemaCatalog } from '../sql-completion/schema-catalog';
 import { ensureDefaultSchemaInitialized } from '../utils/schema-init';
@@ -88,6 +89,30 @@ export function QueryEditor({ tab }: QueryEditorProps) {
     executeCurrentRef.current = handleExecuteCurrent;
     executeAllRef.current = handleExecuteAll;
   }, [handleExecuteCurrent, handleExecuteAll]);
+
+  useEffect(() => {
+    if (!editorRef.current || statements.length === 0) return;
+    const model = editorRef.current.getModel();
+    if (!model) return;
+    const decorations = statements.map((s) => {
+      const risk = classifyRisk(s.sql);
+      const color = riskColor(risk);
+      return {
+        range: new (window as any).monaco.Range(s.startLine, 1, s.endLine, 1),
+        options: {
+          isWholeLine: true,
+          overviewRuler: { color, position: 1 },
+          minimap: { color, position: 1 },
+          className: '',
+          inlineClassName: '',
+          linesDecorationsClassName: '',
+          marginClassName: '',
+          backgroundColor: color,
+        },
+      };
+    });
+    editorRef.current.deltaDecorations([], decorations);
+  }, [statements]);
 
   const handleEditorMount = useCallback((editor: any, monaco: any) => {
     editorRef.current = editor;
@@ -193,7 +218,6 @@ export function QueryEditor({ tab }: QueryEditorProps) {
                 title="Run current statement (Ctrl+Enter)"
               >
                 <Play className="w-3 h-3" />
-                Run
               </motion.button>
 
               {hasMultipleStatements && (
@@ -205,7 +229,6 @@ export function QueryEditor({ tab }: QueryEditorProps) {
                   title="Run all statements (Ctrl+Shift+Enter)"
                 >
                   <List className="w-3 h-3" />
-                  Run All ({statements.length})
                 </motion.button>
               )}
             </>
@@ -219,7 +242,6 @@ export function QueryEditor({ tab }: QueryEditorProps) {
             title="Abrir .sql"
           >
             <FolderOpen className="w-3 h-3" />
-            Abrir
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.02 }}
@@ -229,7 +251,6 @@ export function QueryEditor({ tab }: QueryEditorProps) {
             title="Guardar .sql"
           >
             <SaveIcon className="w-3 h-3" />
-            Guardar
           </motion.button>
           
           <motion.button
@@ -240,7 +261,6 @@ export function QueryEditor({ tab }: QueryEditorProps) {
             title="Visual Query Builder (Ctrl+Shift+B)"
           >
             <Boxes className="w-3 h-3" />
-            Builder
           </motion.button>
 
           {/* Indicador de ejecución */}
@@ -261,18 +281,17 @@ export function QueryEditor({ tab }: QueryEditorProps) {
         <div className="flex items-center gap-2.5 text-xs text-dark-muted/60">
           <div className="flex items-center gap-1">
             <Code2 className="w-3 h-3 text-matrix-500/70" />
-            <span className="text-[11px]">SQL Editor</span>
           </div>
           <div className="h-3 w-px bg-dark-border/30" />
           <div className="flex items-center gap-1">
             <kbd className="text-[10px] px-1.5 py-0.5">Ctrl+Enter</kbd>
-            <span className="text-[11px]">Run</span>
+            <Play className="w-3 h-3 text-matrix-500/70" />
           </div>
           {hasMultipleStatements && (
             <>
               <div className="flex items-center gap-1">
                 <kbd className="text-[10px] px-1.5 py-0.5">Ctrl+Shift+Enter</kbd>
-                <span className="text-[11px]">Run All</span>
+                <List className="w-3 h-3 text-matrix-500/70" />
               </div>
             </>
           )}

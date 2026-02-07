@@ -1,6 +1,107 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Clock, Rows3, ChevronLeft, ChevronRight, X, Copy, Check, Edit2, Save, XCircle, Trash2, Key, Plus, Minus, Search, Plus as PlusIcon, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { AlertCircle, Clock, Rows3, ChevronLeft, ChevronRight, X, Copy, Check, Edit2, Save, XCircle, Trash2, Key, Plus, Minus, Search, Plus as PlusIcon, ArrowUpDown, ArrowUp, ArrowDown, Maximize2 } from 'lucide-react';
+import { queryApi } from '../infrastructure/tauri-api';
+
+interface CellEditorModalProps {
+  initialValue: string;
+  columnName: string;
+  dataType: string;
+  onSave: (newValue: string) => void;
+  onClose: () => void;
+}
+
+function CellEditorModal({ initialValue, columnName, dataType, onSave, onClose }: CellEditorModalProps) {
+  const [content, setContent] = useState(initialValue);
+  
+  // Detectar lenguaje para el editor
+  const language = useMemo(() => {
+    const dt = dataType.toLowerCase();
+    if (dt.includes('json')) return 'json';
+    if (dt.includes('xml')) return 'xml';
+    if (dt.includes('html')) return 'html';
+    if (dt.includes('sql')) return 'sql';
+    
+    // Auto-detección basada en contenido
+    const trimmed = content.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        JSON.parse(trimmed);
+        return 'json';
+      } catch {}
+    }
+    if (trimmed.startsWith('<') && trimmed.endsWith('>')) return 'xml';
+    
+    return 'plaintext';
+  }, [dataType, content]);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]" 
+      onClick={onClose}
+    >
+      <motion.div 
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        className="bg-dark-surface border border-dark-border/50 rounded-lg shadow-2xl w-[800px] max-w-[90vw] h-[600px] max-h-[80vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-dark-border/50 bg-dark-elevated/50">
+          <div className="flex items-center gap-2">
+            <Edit2 className="w-4 h-4 text-matrix-400" />
+            <span className="font-semibold text-dark-text text-sm">Editing: {columnName}</span>
+            <span className="text-xs text-dark-muted bg-dark-surface/50 px-2 py-0.5 rounded border border-dark-border/30">
+              {dataType}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onSave(content)}
+              className="btn btn-primary px-3 py-1 text-xs flex items-center gap-1"
+            >
+              <Save className="w-3.5 h-3.5" />
+              Apply Changes
+            </button>
+            <button 
+              onClick={onClose} 
+              className="btn btn-ghost p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        
+        {/* Editor */}
+        <div className="flex-1 relative">
+          <Editor
+            height="100%"
+            language={language}
+            value={content}
+            theme="vs-dark"
+            onChange={(value) => setContent(value || '')}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 13,
+              fontFamily: 'JetBrains Mono, Fira Code, monospace',
+              lineNumbers: 'on',
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              wordWrap: 'on',
+              padding: { top: 12 },
+            }}
+          />
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 import { createPortal } from 'react-dom';
 import Editor from '@monaco-editor/react';
 import clsx from 'clsx';
@@ -25,6 +126,7 @@ interface ResultsTableProps {
     error: string | null;
     isExecuting: boolean;
   };
+  hideMenu?: boolean;
 }
 
 const MAX_PREVIEW_LENGTH = 100;
@@ -518,9 +620,11 @@ interface EditableCellProps {
   onStartEdit: () => void;
   onSave: (newValue: string) => void;
   onCancel: () => void;
+  onOpenModal: () => void;
+  onNavigate?: (action: 'next' | 'prev' | 'save' | 'cancel') => void;
 }
 
-function EditableCell({ value, isEditing, isModified, onStartEdit, onSave, onCancel }: EditableCellProps) {
+function EditableCell({ value, isEditing, isModified, onStartEdit, onSave, onCancel, onOpenModal, onNavigate }: EditableCellProps) {
   const [editValue, setEditValue] = useState(formatFullValue(value));
 
   useEffect(() => {
@@ -531,22 +635,43 @@ function EditableCell({ value, isEditing, isModified, onStartEdit, onSave, onCan
 
   if (isEditing) {
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 min-w-[200px]">
         <input
           type="text"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              onSave(editValue);
+              if (e.ctrlKey || e.metaKey) {
+                onSave(editValue);
+                onNavigate?.('save');
+              } else {
+                onSave(editValue);
+                onNavigate?.('next');
+              }
             } else if (e.key === 'Escape') {
               onCancel();
+              onNavigate?.('cancel');
+            } else if (e.key === 'Tab') {
+              e.preventDefault();
+              onSave(editValue);
+              onNavigate?.(e.shiftKey ? 'prev' : 'next');
             }
           }}
           onBlur={() => onSave(editValue)}
           autoFocus
           className="flex-1 bg-dark-surface border border-matrix-500 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-matrix-400"
         />
+        <button
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onOpenModal();
+          }}
+          className="p-1 hover:bg-dark-hover rounded text-dark-muted hover:text-matrix-400"
+          title="Open Editor"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     );
   }
@@ -564,7 +689,7 @@ function EditableCell({ value, isEditing, isModified, onStartEdit, onSave, onCan
   );
 }
 
-export function ResultsTable({ tab }: ResultsTableProps) {
+export function ResultsTable({ tab, hideMenu }: ResultsTableProps) {
   const { executeQuery } = useQueryStore();
   const { connections } = useConnectionStore();
   const { result, error, isExecuting, connectionId, query } = tab;
@@ -583,6 +708,15 @@ export function ResultsTable({ tab }: ResultsTableProps) {
     columnName: string;
   } | null>(null);
 
+  // Estado para modal de edición
+  const [editorModalContent, setEditorModalContent] = useState<{
+    initialValue: string;
+    columnName: string;
+    dataType: string;
+    rowIndex: number;
+    columnIndex: number;
+  } | null>(null);
+
   // Estado de edición
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedRows, setEditedRows] = useState<Map<number, Map<number, CellValue>>>(new Map());
@@ -594,6 +728,11 @@ export function ResultsTable({ tab }: ResultsTableProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [pendingDeleteStatement, setPendingDeleteStatement] = useState<string>('');
   const [, setPendingDeleteRowIndex] = useState<number | null>(null);
+
+  // Estado para inserción de fila
+  const [isInserting, setIsInserting] = useState(false);
+  const [newRowValues, setNewRowValues] = useState<Map<string, any>>(new Map());
+  const [insertingCell, setInsertingCell] = useState<number | null>(null);
 
   // Estado para filtro y ordenamiento local
   const [filterText, setFilterText] = useState('');
@@ -1011,6 +1150,54 @@ export function ResultsTable({ tab }: ResultsTableProps) {
     }
   }, [pendingDeleteStatement, executeQuery, tab.id, query]);
 
+  const toggleInsertMode = useCallback(() => {
+    if (isInserting) {
+      setNewRowValues(new Map());
+      setInsertingCell(null);
+    } else {
+      setInsertingCell(0);
+    }
+    setIsInserting(!isInserting);
+  }, [isInserting]);
+
+  const updateNewRowValue = useCallback((columnName: string, value: any) => {
+    setNewRowValues(prev => {
+      const next = new Map(prev);
+      if (value === null || value === '') {
+        next.delete(columnName);
+      } else {
+        next.set(columnName, value);
+      }
+      return next;
+    });
+  }, []);
+
+  const saveNewRow = useCallback(async () => {
+    if (!queryAnalysis?.tableName || !connectionId) return;
+    
+    try {
+      const values: Record<string, any> = {};
+      newRowValues.forEach((v, k) => values[k] = v);
+      
+      await queryApi.insertRow(
+        connectionId,
+        queryAnalysis.schemaName || null,
+        queryAnalysis.tableName,
+        values
+      );
+      
+      // Refrescar
+      await executeQuery(tab.id, query);
+      
+      setIsInserting(false);
+      setNewRowValues(new Map());
+      setInsertingCell(null);
+    } catch (err) {
+      console.error('Failed to insert row:', err);
+      alert('Failed to insert row: ' + String(err));
+    }
+  }, [queryAnalysis, connectionId, newRowValues, executeQuery, tab.id, query]);
+
   if (isExecuting) {
     return (
       <div className="h-full flex items-center justify-center bg-dark-bg/50 text-dark-muted">
@@ -1084,13 +1271,31 @@ export function ResultsTable({ tab }: ResultsTableProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          <MenuActions
-            onModal={() => useResultPanelsStore.getState().setPanelState(tab.id, 'modal')}
-            onPin={() => useResultPanelsStore.getState().setPanelState(tab.id, 'pinned')}
-            onCsv={handleExportCsv}
-            onXlsx={handleExportXlsx}
-            onInsert={handleExportInsert}
-          />
+          {!hideMenu && (
+            <MenuActions
+              onModal={() => {
+                useResultPanelsStore.getState().ensurePanelFromResult({
+                  id: tab.id,
+                  query,
+                  connectionId,
+                  result: result!,
+                });
+                useResultPanelsStore.getState().setPanelState(tab.id, 'modal');
+              }}
+              onPin={() => {
+                useResultPanelsStore.getState().ensurePanelFromResult({
+                  id: tab.id,
+                  query,
+                  connectionId,
+                  result: result!,
+                });
+                useResultPanelsStore.getState().setPanelState(tab.id, 'pinned');
+              }}
+              onCsv={handleExportCsv}
+              onXlsx={handleExportXlsx}
+              onInsert={handleExportInsert}
+            />
+          )}
           {canEdit && (
             <div className="flex items-center gap-2">
               {isEditMode && hasChanges && (
@@ -1169,6 +1374,19 @@ export function ResultsTable({ tab }: ResultsTableProps) {
               <Search className="w-3 h-3" />
               Aplicar filtros
             </button>
+            
+            {canEdit && (
+              <button
+                onClick={toggleInsertMode}
+                className={clsx(
+                  "btn px-2 py-1 text-xs flex items-center gap-1 ml-2",
+                  isInserting ? "bg-matrix-900/50 text-matrix-400 border border-matrix-500" : "btn-secondary"
+                )}
+              >
+                <Plus className="w-3 h-3" />
+                New Row
+              </button>
+            )}
           </div>
           <div className="space-y-2">
             {filters.map((f, idx) => (
@@ -1247,6 +1465,85 @@ export function ResultsTable({ tab }: ResultsTableProps) {
             </tr>
           </thead>
           <tbody>
+            {isInserting && (
+              <tr className="bg-matrix-900/20 border-b-2 border-matrix-500/50 shadow-lg">
+                {result.columns.map((col, colIdx) => {
+                  const rawValue = newRowValues.get(col.name);
+                  let cellValue: CellValue = { type: 'Null' };
+                  
+                  // Infer type from column data_type
+                  const typeLower = col.data_type.toLowerCase();
+                  if (rawValue !== undefined && rawValue !== null) {
+                      if (typeLower.includes('bool')) {
+                          cellValue = { type: 'Bool', value: Boolean(rawValue) };
+                      } else if (typeLower.includes('int')) {
+                          cellValue = { type: 'Int', value: Number(rawValue) };
+                      } else if (typeLower.includes('float') || typeLower.includes('double') || typeLower.includes('decimal') || typeLower.includes('numeric')) {
+                          cellValue = { type: 'Float', value: Number(rawValue) };
+                      } else if (typeLower.includes('json')) {
+                          cellValue = { type: 'Json', value: rawValue };
+                      } else {
+                          cellValue = { type: 'String', value: String(rawValue) };
+                      }
+                  } else if (col.data_type) {
+                      // Try to hint type even if null
+                      if (typeLower.includes('bool')) cellValue = { type: 'Bool', value: false }; // Placeholder
+                      else cellValue = { type: 'Null' };
+                  }
+                  
+                  const isEditing = insertingCell === colIdx;
+                  
+                  return (
+                    <td key={colIdx} className="px-3 py-1.5 font-mono max-w-[300px] border-r border-dark-border/30 last:border-r-0 relative">
+                       {colIdx === 0 && (
+                           <div className="absolute left-0 top-0 bottom-0 w-1 bg-matrix-500" />
+                       )}
+                       <EditableCell 
+                           value={cellValue}
+                           isEditing={isEditing}
+                           isModified={rawValue !== undefined}
+                           onStartEdit={() => setInsertingCell(colIdx)}
+                           onSave={(val) => {
+                               const parsed = parseValueByType(val, col.data_type);
+                               updateNewRowValue(col.name, parsed);
+                           }}
+                           onCancel={() => {
+                               setInsertingCell(null);
+                           }}
+                           onOpenModal={() => {
+                               setEditorModalContent({
+                                   initialValue: formatFullValue(cellValue),
+                                   columnName: col.name,
+                                   dataType: col.data_type,
+                                   rowIndex: -1,
+                                   columnIndex: colIdx,
+                               });
+                           }}
+                           onNavigate={(action) => {
+                               if (action === 'next') {
+                                   const nextIdx = colIdx + 1;
+                                   if (nextIdx < result.columns.length) {
+                                       setInsertingCell(nextIdx);
+                                   } else {
+                                       setInsertingCell(0);
+                                   }
+                               } else if (action === 'prev') {
+                                   const prevIdx = colIdx - 1;
+                                   if (prevIdx >= 0) {
+                                       setInsertingCell(prevIdx);
+                                   }
+                               } else if (action === 'save') {
+                                   saveNewRow();
+                               } else if (action === 'cancel') {
+                                   toggleInsertMode();
+                               }
+                           }}
+                       />
+                    </td>
+                  );
+                })}
+              </tr>
+            )}
             {processedRows.map(({ row, index: rowIdx }) => {
               const hasRowEdits = editedRows.has(rowIdx);
               return (
@@ -1294,6 +1591,15 @@ export function ResultsTable({ tab }: ResultsTableProps) {
                               setEditingCell(null);
                             }}
                             onCancel={() => setEditingCell(null)}
+                            onOpenModal={() => {
+                              setEditorModalContent({
+                                initialValue: formatFullValue(cellValue),
+                                columnName,
+                                dataType: result.columns[cellIdx]?.data_type || 'text',
+                                rowIndex: rowIdx,
+                                columnIndex: cellIdx,
+                              });
+                            }}
                           />
                         ) : (
                           <div className="truncate">
@@ -1369,6 +1675,28 @@ export function ResultsTable({ tab }: ResultsTableProps) {
           value={viewerContent.cell}
           columnName={viewerContent.columnName}
           onClose={() => setViewerContent(null)}
+        />
+      )}
+
+      {/* Editor Modal */}
+      {editorModalContent && (
+        <CellEditorModal
+          initialValue={editorModalContent.initialValue}
+          columnName={editorModalContent.columnName}
+          dataType={editorModalContent.dataType}
+          onClose={() => setEditorModalContent(null)}
+          onSave={(newValue) => {
+            if (editorModalContent.rowIndex === -1) {
+                 const col = result.columns[editorModalContent.columnIndex];
+                 const parsed = parseValueByType(newValue, col.data_type);
+                 updateNewRowValue(col.name, parsed);
+                 setInsertingCell(null); // Return focus or close
+            } else {
+                updateCellValue(editorModalContent.rowIndex, editorModalContent.columnIndex, newValue);
+                setEditingCell(null);
+            }
+            setEditorModalContent(null);
+          }}
         />
       )}
 
