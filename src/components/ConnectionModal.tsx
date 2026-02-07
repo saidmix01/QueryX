@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, FolderOpen } from 'lucide-react';
+import { open } from '@tauri-apps/api/dialog';
 import { useUIStore } from '../store/ui-store';
 import { useConnectionStore } from '../store/connection-store';
 import { normalizeError } from '../utils/global-error-handler';
@@ -105,6 +106,28 @@ export function ConnectionModal() {
       engine,
       port: defaultPorts[engine],
     }));
+  };
+
+  const handleBrowseFile = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{
+          name: 'SQLite Database',
+          extensions: ['db', 'sqlite', 'sqlite3']
+        }]
+      });
+      
+      if (selected && typeof selected === 'string') {
+        setForm(f => ({
+          ...f,
+          file_path: selected,
+          database: selected
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to open file dialog:', err);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -229,16 +252,26 @@ export function ConnectionModal() {
             /* SQLite: File Path */
             <div>
               <label className="label">Database File</label>
-              <input
-                type="text"
-                className="input"
-                value={form.file_path}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, file_path: e.target.value, database: e.target.value }))
-                }
-                placeholder="/path/to/database.db"
-                required
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="input flex-1"
+                  value={form.file_path}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, file_path: e.target.value, database: e.target.value }))
+                  }
+                  placeholder="/path/to/database.db"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={handleBrowseFile}
+                  className="p-2 border border-dark-border rounded-lg hover:bg-dark-border transition-colors"
+                  title="Browse File"
+                >
+                  <FolderOpen className="w-5 h-5 text-dark-muted hover:text-white" />
+                </button>
+              </div>
             </div>
           ) : (
             /* Server-based DBs */
